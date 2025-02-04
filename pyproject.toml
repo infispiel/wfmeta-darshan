@@ -1,0 +1,11 @@
+[project]
+name = "pydarshan-dask-tests"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "darshan>=3.4.5.0",
+    "h5py>=3.11.0",
+    "ipykernel>=6.29.5",
+]

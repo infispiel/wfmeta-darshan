@@ -1,5 +1,4 @@
 import darshan
-import h5py
 
 def main():
     print("Hello from pydarshan-dask-tests!")

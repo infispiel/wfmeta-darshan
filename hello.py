@@ -2,7 +2,7 @@ import darshan
 
 def main():
     print("Hello from pydarshan-dask-tests!")
-    header="../../xpmoda_data/ImageProcessing/D2024-04-18_15:54:02_R1_W8/"
+    header="ImageProcessing/D2024-04-18_15:54:02_R1_W8/"
     filename1="agueroud_python3.10_id56357-56357_4-18-57271-14829777830687840415_1.darshan" # lorge file
     filename2="agueroud_python3.10_id11355-11355_4-18-57271-17993944196753836403_1.darshan" # lorge file
     filename3="agueroud_mpiexec_id12762-12762_4-18-57269-13840249305489711412_1.darshan"
@@ -23,7 +23,9 @@ def main():
         print("modules: ", list(report.modules.keys()))
     
         # export POSIX module records to DataFrame and print
-        posix_df = report.mod_records('POSIX', dtype='numpy', warnings=True)
+        report.mod_read_all_dxt_records("DXT_POSIX",dtype="numpy")
+        
+        #posix_df = report.mod_records('POSIX', dtype='numpy', warnings=True)
         print(next(posix_df))
         #posix_df = report.records['POSIX'].to_df()
         #print("POSIX df: ", posix_df)

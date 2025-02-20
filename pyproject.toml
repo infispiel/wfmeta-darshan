@@ -7,4 +7,5 @@ requires-python = ">=3.8"
 dependencies = [
     "darshan>=3.4.5.0",
     "ipykernel>=6.29.5",
+    "pyarrow>=17.0.0",
 ]

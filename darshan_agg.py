@@ -1,16 +1,155 @@
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import darshan
 import os
 import argparse
 import pandas as pd
 
-# in the future, skip_dxt_posix should be deprecated, but
-# for now we need it to read Amal's examples...
+#####################################################
+# Classes                                           #
+#####################################################
 
-# TODO: find a way to brute force trying to read
-#   dxt_posix and recover in the case of failure.
-#   alternatively, mention it to the darshan folks.
-def read_log(filename:str, skip_dxt_posix:bool = True, debug:bool = False) -> List[Dict]:
+class DXT_POSIX_metadata :
+    id: int
+    rank: int
+    hostname: str
+    write_count: int
+    read_count: int
+
+    def __init__(self, i_id, i_rank, i_hostname, i_write, i_read) :
+        self.id = i_id
+        self.rank = i_rank
+        self.hostname = i_hostname
+        self.write_count = i_write
+        self.read_count = i_read
+
+    def to_filename(self) :
+        return "_".join([str(self.id), str(self.rank), self.hostname])
+
+class DXT_POSIX_coll :
+    metadata: List[DXT_POSIX_metadata]
+    read_segments: Dict[str, pd.DataFrame]
+    write_segments: Dict[str, pd.DataFrame]
+
+    def __init__(self, posix_records: List):
+        self.metadata = []
+        self.read_segments = {}
+        self.write_segments = {}
+
+        for record in posix_records :
+            record_metadata = DXT_POSIX_metadata(record["id"], record["rank"], record["hostname"], 
+                                    record["read_count"], record["write_count"])
+            self.metadata.append(record_metadata)
+
+            # for now working under the assumption that the `id` of an entry is unique.
+            #   if this does not hold, combine hostname + rank + id into a key.
+            if record_metadata.id in self.read_segments.keys() :
+                raise ValueError("ASSUMPTION FALSE: record IDs are not unique!")
+
+            self.read_segments[record_metadata.id] = record["read_segments"]
+            self.write_segments[record_metadata.id] = record["write_segments"]
+
+    def export_parquet(self, directory:str, prefix: str) :
+        # this version just spits every entry to its own file
+        # we might want to join these for less file nonsense
+        file_prefix = "DXTPOSIX"
+        file_suffix = ".parquet"
+
+        for record in self.metadata :
+            file_id_prefix = record.to_filename()
+            read_filename = file_prefix + "_" + prefix + "_" + file_id_prefix + "_read_segments" + file_suffix
+            self.read_segments[record.id].to_parquet(os.path.join(directory, read_filename))
+            
+            write_filename = file_prefix + "_" + prefix + "_" + file_id_prefix + "_write_segments" + file_suffix
+            self.write_segments[record.id].to_parquet(os.path.join(directory, write_filename))
+
+##############################
+# counter-only collections   #
+##############################
+
+class counters_coll :
+    metadata: List[Tuple[int, int]]
+    counters: Dict[Tuple[int, int], pd.DataFrame]
+
+    def __init__(self, records) :
+        self.metadata = []
+        self.counters = {}
+
+        for record in records :
+            record_metadata = (record["rank"], record["id"])
+            self.metadata.append(record_metadata)
+            self.counters[record_metadata] = record["counters"]
+
+    def _file_fillers (self, module_name: str):
+        file_prefix = module_name + "_"
+        file_suffix = ".parquet"
+        return (file_prefix, file_suffix)
+
+    def export_parquet(self, module_name: str, directory: str, prefix: str) :
+        file_prefix, file_suffix = self._file_fillers(module_name)
+
+        for record in self.metadata :
+            file_id_prefix = "_".join(str(i) for i in record)
+            counters_filename = file_prefix + prefix + "_" + file_id_prefix + "_counters" + file_suffix
+            self.counters[record].to_parquet(os.path.join(directory, counters_filename))
+
+class LUSTRE_coll(counters_coll) :
+    metadata: List[Tuple[int, int]]
+    counters: Dict[Tuple[int, int], pd.DataFrame]
+
+    def __init__(self, records) :
+        super().__init__(records)
+
+    def export_parquet(self, directory: str, prefix: str) :
+        super().export_parquet("LUSTRE", directory, prefix)
+
+##############################
+# counter + fcounter colls   #
+##############################
+
+class fcounters_coll(counters_coll) :
+    fcounters: Dict[Tuple[int, int], pd.DataFrame]
+
+    def __init__(self, records):
+        # doesn't use super, might want to change it to use it but
+        #   then we're looping over records twice and that's mildly annoying
+        self.metadata = []
+        self.counters = {}
+        self.fcounters = {}
+
+        for record in records :
+            record_metadata = (record["rank"], record["id"])
+            self.metadata.append(record_metadata)
+            self.counters[record_metadata] = record["counters"]
+            self.fcounters[record_metadata] = record["fcounters"]
+    
+    def export_parquet(self, module_name, directory, prefix):
+        super().export_parquet(module_name, directory, prefix)
+        file_prefix, file_suffix = super()._file_fillers(module_name)
+        
+        for record in self.metadata :
+            file_id_prefix = "_".join(str(i) for i in record)
+            fcounters_filename = file_prefix + prefix + "_" + file_id_prefix + "_fcounters" + file_suffix
+            self.fcounters[record].to_parquet(os.path.join(directory, fcounters_filename))
+
+class STDIO_coll(fcounters_coll) :
+    def __init__(self, records) :
+        super().__init__(records)
+
+    def export_parquet(self, directory: str, prefix: str) :
+        super().export_parquet("STDIO", directory, prefix)
+
+class POSIX_coll(fcounters_coll) :
+    def __init__(self, records) :
+        super().__init__(records)
+
+    def export_parquet(self, directory: str, prefix: str) :
+        super().export_parquet("POSIX", directory, prefix)
+
+#####################################################
+# Main functions                                    #
+#####################################################
+
+def read_log(filename:str, debug:bool = False) -> List[Dict]:
     """Read the provided `.darshan` log file.
     
     Manually reads in the provided `.darshan` log file by loading in its
@@ -49,7 +188,6 @@ def read_log(filename:str, skip_dxt_posix:bool = True, debug:bool = False) -> Li
         expected_modules = ["POSIX", "LUSTRE", "STDIO", "DXT_POSIX", "HEATMAP", "MPI-IO", "DXT_MPIIO"]
         modules = list(report.modules.keys())
         output["modules"] = modules
-        output["fetched_modules"] = []
         
         if debug :
             print("\tFound modules: %s" % ",".join(modules))
@@ -58,32 +196,34 @@ def read_log(filename:str, skip_dxt_posix:bool = True, debug:bool = False) -> Li
             if m not in expected_modules :
                 print("unexpected module found: %s" % m)
 
+        loaded_modules = []
+
         # Get data for each found module
         if "POSIX" in modules :
             report.mod_read_all_records("POSIX",dtype="pandas")
-            output["POSIX"] = report.records["POSIX"]
-            output["fetched_modules"].append("POSIX")
-            #output["POSIX"] = report.records["POSIX"].to_df() 
+            output["POSIX_coll"] = POSIX_coll(report.records["POSIX"])
+            loaded_modules.append("POSIX_coll")
         
         if "LUSTRE" in modules :
             report.mod_read_all_lustre_records(dtype="pandas")
-            output["fetched_modules"].append("LUSTRE")
-            output["LUSTRE"] = report.records["LUSTRE"]
-            #output["LUSTRE"] = report.records["LUSTRE"].to_df()
+            output["LUSTRE_coll"] = LUSTRE_coll(report.records["LUSTRE"])
+            loaded_modules.append("LUSTRE_coll")
 
         if "STDIO" in modules :
             report.mod_read_all_records("STDIO", dtype="pandas")
-            output["fetched_modules"].append("STDIO")
-            output["STDIO"] = report.records["STDIO"]
-            #output["STDIO"] = report.records["STDIO"].to_df()
+            output["STDIO_coll"] = STDIO_coll(report.records["STDIO"])
+            loaded_modules.append("STDIO_coll")
 
         # DXT_POSIX causes a kernel crash _only in amal's data_.
         # TODO : make sure this works with pandas as an export type
-        if "DXT_POSIX" in modules and not skip_dxt_posix :
-            report.mod_read_all_dxt_records("DXT_POSIX",dtype="pandas")
-            output["DXT_POSIX"] = report.records["DXT_POSIX"]
-            output["fetched_modules"].append("DXT_POSTIX")
-            #output["DXT_POSIX"] = report.records["DXT_POSIX"].to_df()
+        if "DXT_POSIX" in modules :
+            # note that this generates a list of dictionaries, which then contain dataframes inside them
+            report.mod_read_all_dxt_records("DXT_POSIX")
+            pos = report.records['DXT_POSIX'].to_df()
+
+            # created a custom output object to deal with it
+            output["DXT_POSIX_coll_object"] = DXT_POSIX_coll(pos)
+            loaded_modules.append("DXT_POSIX_coll_object")
 
         # Received message: Skipping. Currently unsupported: HEATMAP in mod_read_all_records().
         # if "HEATMAP" in modules :
@@ -92,17 +232,17 @@ def read_log(filename:str, skip_dxt_posix:bool = True, debug:bool = False) -> Li
 
         if "MPI-IO" in modules :
             report.mod_read_all_records("MPI-IO", dtype="pandas")
-            output["MPI-IO"] = report.records["MPI-IO"]
-            output["fetched_modules"].append("MPI-IO")
-            #output["MPI-IO"] = report.records["MPI-IO"].to_df()
+            print("############### MPI IO ###############")
+            print(report.records["MPI-IO"])
 
         if "DXT_MPIIO" in modules :
             report.mod_read_all_dxt_records("DXT_MPIIO", dtype="pandas")
-            output["DXT_MPIIO"] = report.records["DXT_MPIIO"]
-            output["fetched_modules"].append("DXT_MPIIO")
-            #output["DXT_MPIIO"] = report.records["DXT_MPIIO"].to_df()
+            print("############### DXT MPI IO ###############")
+            print(report.records["DXT_MPIIO"])
+    
+    output["report"] = report
+    output["loaded_modules"] = loaded_modules
 
-        print(report.info())
     return output
 
 def collect_logfiles(directory:str, debug:bool = False) -> List[str]:
@@ -205,21 +345,36 @@ def write_to_parquet(report_data: Dict[str, Dict],
 
     metadata_df_filename = os.path.join(output_dir, "metadata.parquet")
     metadata_df.to_parquet(metadata_df_filename)
+
     if debug: print("Metadata df written to %s." % metadata_df_filename)
 
     for report_name in list(report_data.keys()) :
-        report_base_name = os.path.join(output_dir, report_name)
+        # report_base_name = os.path.join(output_dir, report_name)
 
         report: Dict = report_data[report_name]
-        module_names: List[str] = report['fetched_modules']
-        print(report["POSIX"])
-        for module_name in module_names :
-            module_filename:str = os.path.join(report_base_name, module_name)
-            module_filename += ".parquet"
 
-            if debug: print("\tWriting module data to %s..." % module_filename)
-            module_data: pd.DataFrame = report[module_name]
-            module_data.to_parquet(module_filename)
+        #module_names: List[str] = report['fetched_modules']
+        #print(report["POSIX"])
+        loaded_modules: List[str] = report["loaded_modules"]
+
+        for module_name in loaded_modules :
+            # filename:str = "_".join([report_base_name, module_name])
+            # filename += '.parquet'
+            # print("\tWriting %s module data to %s..." % (module_name, filename))
+            # report[module_name].to_parquet(filename)
+            report[module_name].export_parquet(output_dir, report_name)
+
+        # for module_name in report['report'].records :
+        #     module_filename:str = os.path.join(report_base_name, module_name)
+        #     module_filename += ".parquet"
+
+        #     if debug: print("\tWriting %s module data to %s..." % (module_name, module_filename))
+        #     module_data: pd.DataFrame = report['report'].records[module_name][0]
+        #     print(module_data)
+        #     print(module_data.keys())
+        #     print(module_data['counters'].keys())
+        #     print(module_data['fcounters'].keys())
+        #     module_data.to_parquet(module_filename)
 
     if debug: print("Done writing parquet files!")
 
@@ -236,7 +391,7 @@ def aggregate_darshan(directory:str, output_loc:str, debug:bool = False) :
     if debug : print("Beginning to collect log data...")
 
     for f in files :
-        tmp_report_data = read_log(os.path.join(directory, f), debug)
+        tmp_report_data = read_log(os.path.join(directory, f), debug=debug)
         tmp_name = generate_name_for_report(tmp_report_data, debug)
         collected_report_data[tmp_name] = tmp_report_data
     

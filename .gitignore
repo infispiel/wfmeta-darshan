@@ -4,3 +4,5 @@ uv.lock
 ImageProcessing
 ex_darshan_logs
 XPDaMoDa
+parquet/
+parquet2/

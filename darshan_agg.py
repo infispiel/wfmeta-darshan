@@ -201,6 +201,8 @@ def read_log(filename:str, debug:bool = False) -> List[Dict]:
         # Get data for each found module
         if "POSIX" in modules :
             report.mod_read_all_records("POSIX",dtype="pandas")
+            print(filename)
+            print(report.records["POSIX"])
             output["POSIX_coll"] = POSIX_coll(report.records["POSIX"])
             loaded_modules.append("POSIX_coll")
         
@@ -214,8 +216,6 @@ def read_log(filename:str, debug:bool = False) -> List[Dict]:
             output["STDIO_coll"] = STDIO_coll(report.records["STDIO"])
             loaded_modules.append("STDIO_coll")
 
-        # DXT_POSIX causes a kernel crash _only in amal's data_.
-        # TODO : make sure this works with pandas as an export type
         if "DXT_POSIX" in modules :
             # note that this generates a list of dictionaries, which then contain dataframes inside them
             report.mod_read_all_dxt_records("DXT_POSIX")
@@ -349,32 +349,12 @@ def write_to_parquet(report_data: Dict[str, Dict],
     if debug: print("Metadata df written to %s." % metadata_df_filename)
 
     for report_name in list(report_data.keys()) :
-        # report_base_name = os.path.join(output_dir, report_name)
-
         report: Dict = report_data[report_name]
 
-        #module_names: List[str] = report['fetched_modules']
-        #print(report["POSIX"])
         loaded_modules: List[str] = report["loaded_modules"]
 
         for module_name in loaded_modules :
-            # filename:str = "_".join([report_base_name, module_name])
-            # filename += '.parquet'
-            # print("\tWriting %s module data to %s..." % (module_name, filename))
-            # report[module_name].to_parquet(filename)
             report[module_name].export_parquet(output_dir, report_name)
-
-        # for module_name in report['report'].records :
-        #     module_filename:str = os.path.join(report_base_name, module_name)
-        #     module_filename += ".parquet"
-
-        #     if debug: print("\tWriting %s module data to %s..." % (module_name, module_filename))
-        #     module_data: pd.DataFrame = report['report'].records[module_name][0]
-        #     print(module_data)
-        #     print(module_data.keys())
-        #     print(module_data['counters'].keys())
-        #     print(module_data['fcounters'].keys())
-        #     module_data.to_parquet(module_filename)
 
     if debug: print("Done writing parquet files!")
 

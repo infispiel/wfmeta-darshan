@@ -163,6 +163,20 @@ class POSIX_coll(fcounters_coll) :
     def export_parquet(self, directory: str, prefix: str) :
         super().export_parquet("POSIX", directory, prefix)
 
+class CounterCollColl :
+    _type: type
+    collection: pd.DataFrame
+
+    def __init__(self, left, right) :
+        if type(left) != type(right) :
+            raise ValueError("Attempted to combine a %s and a %s." % 
+                             (str(type(left)), str(type(right))))
+        
+        self._type = type(left)
+        l_df: pd.DataFrame = left.collapsed
+        r_df: pd.DataFrame = right.collapsed
+
+
 #####################################################
 # Main functions                                    #
 #####################################################

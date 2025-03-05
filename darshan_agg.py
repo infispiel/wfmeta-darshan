@@ -9,6 +9,7 @@ import pandas as pd
 #####################################################
 
 class DXT_POSIX_metadata :
+    report_name: str
     id: int
     rank: int
     hostname: str
@@ -67,37 +68,56 @@ class DXT_POSIX_coll :
 ##############################
 
 class counters_coll :
+    report_name: str
     metadata: List[Tuple[int, int]]
-    counters: Dict[Tuple[int, int], pd.DataFrame]
+    records: Dict[Tuple[int, int], pd.DataFrame]
+    collapsed: pd.DataFrame
 
-    def __init__(self, records) :
+    def __init__(self, records, report_name) :
+        self.report_name = report_name
         self.metadata = []
-        self.counters = {}
+        self.records = {}
 
         for record in records :
             record_metadata = (record["rank"], record["id"])
+            # if record_metadata[0] != record["counters"].rank[0] and record_metadata[0] != -1 :
+            #     raise ValueError("Rank of record does not match rank in provided DF.")
+            # if record_metadata[1] != record["counters"].id[0] and record_metadata[1] != -1 :
+            #     raise ValueError("ID of record does not match rank in provided DF.")
+
             self.metadata.append(record_metadata)
-            self.counters[record_metadata] = record["counters"]
+            self.records[record_metadata] = record["counters"]
+        
+        self._collapse_rank_id()
 
     def _file_fillers (self, module_name: str):
         file_prefix = module_name + "_"
         file_suffix = ".parquet"
         return (file_prefix, file_suffix)
 
-    def export_parquet(self, module_name: str, directory: str, prefix: str) :
+    def export_parquet(self, module_name: str, directory: str, prefix: str, ltype: str = "_counters") :
         file_prefix, file_suffix = self._file_fillers(module_name)
 
-        for record in self.metadata :
-            file_id_prefix = "_".join(str(i) for i in record)
-            counters_filename = file_prefix + prefix + "_" + file_id_prefix + "_counters" + file_suffix
-            self.counters[record].to_parquet(os.path.join(directory, counters_filename))
+        filename = file_prefix + prefix + ltype + file_suffix
+        self.collapsed.to_parquet(os.path.join(directory, filename))
+    
+    def _collapse_rank_id(self) :
+        output_df: pd.DataFrame = None
+        for i,record in enumerate(self.metadata) :
+            if i == 0 :
+                output_df = self.records[record]
+            else :
+                output_df = pd.concat([output_df, self.records[record]])
+
+        self.collapsed = output_df
+
+    def combine(self, other: 'counters_coll') -> pd.DataFrame :
+        
+        pass
 
 class LUSTRE_coll(counters_coll) :
-    metadata: List[Tuple[int, int]]
-    counters: Dict[Tuple[int, int], pd.DataFrame]
-
-    def __init__(self, records) :
-        super().__init__(records)
+    def __init__(self, *args) :
+        super().__init__(*args)
 
     def export_parquet(self, directory: str, prefix: str) :
         super().export_parquet("LUSTRE", directory, prefix)
@@ -107,40 +127,38 @@ class LUSTRE_coll(counters_coll) :
 ##############################
 
 class fcounters_coll(counters_coll) :
-    fcounters: Dict[Tuple[int, int], pd.DataFrame]
-
-    def __init__(self, records):
+    def __init__(self, records, report_name):
+        self.report_name = report_name
         # doesn't use super, might want to change it to use it but
         #   then we're looping over records twice and that's mildly annoying
         self.metadata = []
-        self.counters = {}
-        self.fcounters = {}
+        self.records = {}
 
         for record in records :
             record_metadata = (record["rank"], record["id"])
             self.metadata.append(record_metadata)
-            self.counters[record_metadata] = record["counters"]
-            self.fcounters[record_metadata] = record["fcounters"]
+
+            combined: pd.DataFrame = pd.merge(
+                record["counters"], record["fcounters"], "left",
+                ["id","rank"])
+
+            self.records[record_metadata] = combined
+        
+        self._collapse_rank_id()
     
     def export_parquet(self, module_name, directory, prefix):
-        super().export_parquet(module_name, directory, prefix)
-        file_prefix, file_suffix = super()._file_fillers(module_name)
-        
-        for record in self.metadata :
-            file_id_prefix = "_".join(str(i) for i in record)
-            fcounters_filename = file_prefix + prefix + "_" + file_id_prefix + "_fcounters" + file_suffix
-            self.fcounters[record].to_parquet(os.path.join(directory, fcounters_filename))
+        super().export_parquet(module_name, directory, prefix, "_records")
 
 class STDIO_coll(fcounters_coll) :
-    def __init__(self, records) :
-        super().__init__(records)
+    def __init__(self, *args) :
+        super().__init__(*args)
 
     def export_parquet(self, directory: str, prefix: str) :
         super().export_parquet("STDIO", directory, prefix)
 
 class POSIX_coll(fcounters_coll) :
-    def __init__(self, records) :
-        super().__init__(records)
+    def __init__(self, *args) :
+        super().__init__(*args)
 
     def export_parquet(self, directory: str, prefix: str) :
         super().export_parquet("POSIX", directory, prefix)
@@ -184,6 +202,12 @@ def read_log(filename:str, debug:bool = False) -> List[Dict]:
         # Get metadata
         output["metadata"] = report.metadata
 
+        report_name = "_".join([
+            "juid%s" % report.metadata['job']['uid'],
+            "jobid%s" % report.metadata['job']['jobid']
+            ])
+        output["report_name"] = report_name
+
         # Get list of modules
         expected_modules = ["POSIX", "LUSTRE", "STDIO", "DXT_POSIX", "HEATMAP", "MPI-IO", "DXT_MPIIO"]
         modules = list(report.modules.keys())
@@ -201,19 +225,19 @@ def read_log(filename:str, debug:bool = False) -> List[Dict]:
         # Get data for each found module
         if "POSIX" in modules :
             report.mod_read_all_records("POSIX",dtype="pandas")
-            print(filename)
-            print(report.records["POSIX"])
-            output["POSIX_coll"] = POSIX_coll(report.records["POSIX"])
+            #print(filename)
+            #print(report.records["POSIX"])
+            output["POSIX_coll"] = POSIX_coll(report.records["POSIX"], report_name)
             loaded_modules.append("POSIX_coll")
         
         if "LUSTRE" in modules :
             report.mod_read_all_lustre_records(dtype="pandas")
-            output["LUSTRE_coll"] = LUSTRE_coll(report.records["LUSTRE"])
+            output["LUSTRE_coll"] = LUSTRE_coll(report.records["LUSTRE"], report_name)
             loaded_modules.append("LUSTRE_coll")
 
         if "STDIO" in modules :
             report.mod_read_all_records("STDIO", dtype="pandas")
-            output["STDIO_coll"] = STDIO_coll(report.records["STDIO"])
+            output["STDIO_coll"] = STDIO_coll(report.records["STDIO"], report_name)
             loaded_modules.append("STDIO_coll")
 
         if "DXT_POSIX" in modules :
@@ -319,16 +343,6 @@ def move_metadata_into_dataframe(report_data: Dict[str, Dict], debug: bool = Fal
     # Return dataframe containing all report metadata.
     return(metadata_df)
 
-def generate_name_for_report(report: Dict, debug=False) -> str:
-    '''Generates a name for a given report using its uid and jobid metadata.
-    '''
-    job_metadata = report['metadata']['job']
-
-    return "_".join([
-        str(job_metadata['uid']), 
-        str(job_metadata['jobid'])
-        ])
-
 def write_to_parquet(report_data: Dict[str, Dict], 
                      metadata_df: pd.DataFrame, 
                      output_dir: str, debug: bool = False) -> None:
@@ -372,8 +386,7 @@ def aggregate_darshan(directory:str, output_loc:str, debug:bool = False) :
 
     for f in files :
         tmp_report_data = read_log(os.path.join(directory, f), debug=debug)
-        tmp_name = generate_name_for_report(tmp_report_data, debug)
-        collected_report_data[tmp_name] = tmp_report_data
+        collected_report_data[tmp_report_data["report_name"]] = tmp_report_data
     
     if debug : print("Done collecting data!")
 

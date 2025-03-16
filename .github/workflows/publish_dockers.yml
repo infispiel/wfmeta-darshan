@@ -30,7 +30,7 @@ jobs:
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
           context: ./share/docker
-          file: ./Dockerfile
+          file: ./share/docker/Dockerfile
           push: false
           target: core
           tags: infispiel/darshan_util_dxtthread:latest
@@ -40,6 +40,6 @@ jobs:
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
           context: ./share/docker
-          file: ./Dockerfile
+          file: ./share/docker/Dockerfile
           push: false
           tags: infispiel/darshan_util_dxtthread_dev:latest

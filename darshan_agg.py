@@ -1,4 +1,5 @@
 from typing import Dict, List, Tuple
+from functools import reduce
 import darshan
 import os
 import argparse
@@ -8,142 +9,179 @@ import pandas as pd
 # Classes                                           #
 #####################################################
 
-class DXT_POSIX_metadata :
-    id: int
-    rank: int
-    hostname: str
-    write_count: int
-    read_count: int
-
-    def __init__(self, i_id, i_rank, i_hostname, i_write, i_read) :
-        self.id = i_id
-        self.rank = i_rank
-        self.hostname = i_hostname
-        self.write_count = i_write
-        self.read_count = i_read
-
-    def to_filename(self) :
-        return "_".join([str(self.id), str(self.rank), self.hostname])
-
-class DXT_POSIX_coll :
-    metadata: List[DXT_POSIX_metadata]
-    read_segments: Dict[str, pd.DataFrame]
-    write_segments: Dict[str, pd.DataFrame]
-
-    def __init__(self, posix_records: List):
-        self.metadata = []
-        self.read_segments = {}
-        self.write_segments = {}
-
-        for record in posix_records :
-            record_metadata = DXT_POSIX_metadata(record["id"], record["rank"], record["hostname"], 
-                                    record["read_count"], record["write_count"])
-            self.metadata.append(record_metadata)
-
-            # for now working under the assumption that the `id` of an entry is unique.
-            #   if this does not hold, combine hostname + rank + id into a key.
-            if record_metadata.id in self.read_segments.keys() :
-                raise ValueError("ASSUMPTION FALSE: record IDs are not unique!")
-
-            self.read_segments[record_metadata.id] = record["read_segments"]
-            self.write_segments[record_metadata.id] = record["write_segments"]
-
-    def export_parquet(self, directory:str, prefix: str) :
-        # this version just spits every entry to its own file
-        # we might want to join these for less file nonsense
-        file_prefix = "DXTPOSIX"
-        file_suffix = ".parquet"
-
-        for record in self.metadata :
-            file_id_prefix = record.to_filename()
-            read_filename = file_prefix + "_" + prefix + "_" + file_id_prefix + "_read_segments" + file_suffix
-            self.read_segments[record.id].to_parquet(os.path.join(directory, read_filename))
-            
-            write_filename = file_prefix + "_" + prefix + "_" + file_id_prefix + "_write_segments" + file_suffix
-            self.write_segments[record.id].to_parquet(os.path.join(directory, write_filename))
-
 ##############################
 # counter-only collections   #
 ##############################
 
 class counters_coll :
+    report_name: str
+    report_ids: Dict[str, str]
     metadata: List[Tuple[int, int]]
-    counters: Dict[Tuple[int, int], pd.DataFrame]
+    records: Dict[Tuple[int, int], pd.DataFrame]
+    collapsed: pd.DataFrame
+    module_name: str = "ERR"
 
-    def __init__(self, records) :
+    def __init__(self, records, report_name, report_ids) :
+        self.report_name = report_name
+        self.report_ids = report_ids
         self.metadata = []
-        self.counters = {}
+        self.records = {}
 
         for record in records :
             record_metadata = (record["rank"], record["id"])
+            # if record_metadata[0] != record["counters"].rank[0] and record_metadata[0] != -1 :
+            #     raise ValueError("Rank of record does not match rank in provided DF.")
+            # if record_metadata[1] != record["counters"].id[0] and record_metadata[1] != -1 :
+            #     raise ValueError("ID of record does not match rank in provided DF.")
+
             self.metadata.append(record_metadata)
-            self.counters[record_metadata] = record["counters"]
+            self.records[record_metadata] = record["counters"]
+        
+        self._collapse_rank_id()
+    
+    def _collapse_rank_id(self) :
+        output_df: pd.DataFrame = None
+        for i,record in enumerate(self.metadata) :
+            if i == 0 :
+                output_df = self.records[record]
+            else :
+                output_df = pd.concat([output_df, self.records[record]])
 
-    def _file_fillers (self, module_name: str):
-        file_prefix = module_name + "_"
-        file_suffix = ".parquet"
-        return (file_prefix, file_suffix)
+        self.collapsed = output_df
 
-    def export_parquet(self, module_name: str, directory: str, prefix: str) :
-        file_prefix, file_suffix = self._file_fillers(module_name)
-
-        for record in self.metadata :
-            file_id_prefix = "_".join(str(i) for i in record)
-            counters_filename = file_prefix + prefix + "_" + file_id_prefix + "_counters" + file_suffix
-            self.counters[record].to_parquet(os.path.join(directory, counters_filename))
+    def __add__(self, other: 'counters_coll') -> 'CounterCollColl' :
+        return CounterCollColl(self, other)
 
 class LUSTRE_coll(counters_coll) :
-    metadata: List[Tuple[int, int]]
-    counters: Dict[Tuple[int, int], pd.DataFrame]
+    module_name: str = "LUSTRE"
 
-    def __init__(self, records) :
-        super().__init__(records)
+    def __init__(self, *args) :
+        super().__init__(*args)
 
     def export_parquet(self, directory: str, prefix: str) :
         super().export_parquet("LUSTRE", directory, prefix)
 
 ##############################
-# counter + fcounter colls   #
+# two-dataframe      colls   #
 ##############################
 
-class fcounters_coll(counters_coll) :
-    fcounters: Dict[Tuple[int, int], pd.DataFrame]
+# e.g. counters & fcounter
+#      DXT_POSIX (read/write)
 
-    def __init__(self, records):
+class fcounters_coll(counters_coll) :
+    module_name: str = "ERR_fcounters"
+    def __init__(self, records, report_name, report_ids):
+        self.report_name = report_name
+        self.report_ids = report_ids
         # doesn't use super, might want to change it to use it but
         #   then we're looping over records twice and that's mildly annoying
         self.metadata = []
-        self.counters = {}
-        self.fcounters = {}
+        self.records = {}
 
         for record in records :
             record_metadata = (record["rank"], record["id"])
             self.metadata.append(record_metadata)
-            self.counters[record_metadata] = record["counters"]
-            self.fcounters[record_metadata] = record["fcounters"]
-    
-    def export_parquet(self, module_name, directory, prefix):
-        super().export_parquet(module_name, directory, prefix)
-        file_prefix, file_suffix = super()._file_fillers(module_name)
+
+            combined: pd.DataFrame = pd.merge(
+                record["counters"], record["fcounters"], "left",
+                ["id","rank"])
+
+            self.records[record_metadata] = combined
         
-        for record in self.metadata :
-            file_id_prefix = "_".join(str(i) for i in record)
-            fcounters_filename = file_prefix + prefix + "_" + file_id_prefix + "_fcounters" + file_suffix
-            self.fcounters[record].to_parquet(os.path.join(directory, fcounters_filename))
+        self._collapse_rank_id()
 
 class STDIO_coll(fcounters_coll) :
-    def __init__(self, records) :
-        super().__init__(records)
+    module_name:str = "STDIO"
+    def __init__(self, *args) :
+        super().__init__(*args)
 
     def export_parquet(self, directory: str, prefix: str) :
         super().export_parquet("STDIO", directory, prefix)
 
 class POSIX_coll(fcounters_coll) :
-    def __init__(self, records) :
-        super().__init__(records)
+    module_name:str = "POSIX"
+    def __init__(self, *args) :
+        super().__init__(*args)
 
     def export_parquet(self, directory: str, prefix: str) :
         super().export_parquet("POSIX", directory, prefix)
+
+class DXT_POSIX_coll(fcounters_coll) :
+    module_name:str = "DXT_POSIX"
+    def __init__(self, records, report_name, report_ids) :
+        self.report_name = report_name
+        self.report_ids = report_ids
+        self.metadata = []
+        self.records= {}
+
+        for record in records :
+            record_metadata = (record["rank"], str(record["id"]), record["hostname"],
+                                record["write_count"], record["read_count"])
+            self.metadata.append(record_metadata)
+
+            r_df: pd.DataFrame = record['read_segments'].assign(seg_type="read")
+            w_df: pd.DataFrame = record['write_segments'].assign(seg_type="write")
+
+            rw_df: pd.DataFrame = pd.concat([r_df, w_df]).assign(rank=record["rank"], id=str(record["id"]))
+            self.records[record_metadata] = rw_df
+
+        self._collapse_rank_id()
+
+##############################
+# collection collections     #
+##############################
+
+# e.g. collections of collected module information
+#   i.e. sum of all POSIX collections from all records
+#   separates them by their job uid and jobid.
+
+class CounterCollColl :
+    _type: type
+    module_name: str
+    collection: pd.DataFrame
+
+    def __init__(self, left: counters_coll, right: counters_coll) :
+        if type(left) is not type(right) :
+            raise ValueError("Attempted to combine a %s and a %s." % 
+                             (str(type(left)), str(type(right))))
+        
+        self._type = type(left)
+        self.module_name = left.module_name
+        l_df: pd.DataFrame = left.collapsed
+        l_ids = left.report_ids
+        r_df: pd.DataFrame = right.collapsed
+        r_ids = right.report_ids
+
+        # add ids info as columns
+        l_df = l_df.assign(juid=l_ids['juid'], jobid=l_ids['jobid'])
+        r_df = r_df.assign(juid=r_ids['juid'], jobid=r_ids['jobid'])
+
+        self.collection = pd.concat([l_df,r_df])
+
+    def _file_fillers (self, module_name: str):
+        file_prefix = module_name
+        file_suffix = ".parquet"
+        return (file_prefix, file_suffix)
+
+    def export_parquet(self, directory: str, ltype: str = "counters") :
+        file_prefix, file_suffix = self._file_fillers(self.module_name)
+
+        filename = "%s_%s%s" % (file_prefix, ltype, file_suffix)
+        self.collection.to_parquet(os.path.join(directory, filename))
+
+    def __add__(self, other: counters_coll) :
+        if type(other) is not self._type :
+            raise ValueError("Attempted to add a %s to a %s collection" %
+            (str(type(other)), str(self._type)))
+        
+        r_df: pd.DataFrame = other.collapsed
+        r_ids = other.report_ids
+        r_df = r_df.assign(juid=r_ids['juid'], jobid=r_ids['jobid'])
+
+        self.collection = pd.concat([self.collection,r_df])
+        return self
+
+
 
 #####################################################
 # Main functions                                    #
@@ -184,6 +222,12 @@ def read_log(filename:str, debug:bool = False) -> List[Dict]:
         # Get metadata
         output["metadata"] = report.metadata
 
+        report_ids = { 'juid': report.metadata['job']['uid'],
+                        'jobid': report.metadata['job']['jobid'] }
+        report_name = "juid%s_jobid%s" % (report_ids['juid'], report_ids['jobid'])
+        output["report_ids"] = report_ids
+        output["report_name"] = report_name
+
         # Get list of modules
         expected_modules = ["POSIX", "LUSTRE", "STDIO", "DXT_POSIX", "HEATMAP", "MPI-IO", "DXT_MPIIO"]
         modules = list(report.modules.keys())
@@ -201,19 +245,19 @@ def read_log(filename:str, debug:bool = False) -> List[Dict]:
         # Get data for each found module
         if "POSIX" in modules :
             report.mod_read_all_records("POSIX",dtype="pandas")
-            print(filename)
-            print(report.records["POSIX"])
-            output["POSIX_coll"] = POSIX_coll(report.records["POSIX"])
+            #print(filename)
+            #print(report.records["POSIX"])
+            output["POSIX_coll"] = POSIX_coll(report.records["POSIX"], report_name, report_ids)
             loaded_modules.append("POSIX_coll")
         
         if "LUSTRE" in modules :
             report.mod_read_all_lustre_records(dtype="pandas")
-            output["LUSTRE_coll"] = LUSTRE_coll(report.records["LUSTRE"])
+            output["LUSTRE_coll"] = LUSTRE_coll(report.records["LUSTRE"], report_name, report_ids)
             loaded_modules.append("LUSTRE_coll")
 
         if "STDIO" in modules :
             report.mod_read_all_records("STDIO", dtype="pandas")
-            output["STDIO_coll"] = STDIO_coll(report.records["STDIO"])
+            output["STDIO_coll"] = STDIO_coll(report.records["STDIO"], report_name, report_ids)
             loaded_modules.append("STDIO_coll")
 
         if "DXT_POSIX" in modules :
@@ -222,7 +266,7 @@ def read_log(filename:str, debug:bool = False) -> List[Dict]:
             pos = report.records['DXT_POSIX'].to_df()
 
             # created a custom output object to deal with it
-            output["DXT_POSIX_coll_object"] = DXT_POSIX_coll(pos)
+            output["DXT_POSIX_coll_object"] = DXT_POSIX_coll(pos, report_name, report_ids)
             loaded_modules.append("DXT_POSIX_coll_object")
 
         # Received message: Skipping. Currently unsupported: HEATMAP in mod_read_all_records().
@@ -319,16 +363,6 @@ def move_metadata_into_dataframe(report_data: Dict[str, Dict], debug: bool = Fal
     # Return dataframe containing all report metadata.
     return(metadata_df)
 
-def generate_name_for_report(report: Dict, debug=False) -> str:
-    '''Generates a name for a given report using its uid and jobid metadata.
-    '''
-    job_metadata = report['metadata']['job']
-
-    return "_".join([
-        str(job_metadata['uid']), 
-        str(job_metadata['jobid'])
-        ])
-
 def write_to_parquet(report_data: Dict[str, Dict], 
                      metadata_df: pd.DataFrame, 
                      output_dir: str, debug: bool = False) -> None:
@@ -348,13 +382,38 @@ def write_to_parquet(report_data: Dict[str, Dict],
 
     if debug: print("Metadata df written to %s." % metadata_df_filename)
 
+    # tmp_keys = list(report_data.keys())
+    # print(tmp_keys[0])
+    # print(report_data[tmp_keys[0]])
+    # print(report_data[tmp_keys[0]]['POSIX'])
+    # a = (report_data[tmp_keys[0]]['POSIX_coll'] + report_data[tmp_keys[1]]['POSIX_coll'])
+    # print(a)
+    # print(report_data[tmp_keys[0]]['report_ids'])
+    # print(report_data[tmp_keys[1]]['report_ids'])
+    # print(a.collection['juid'].unique())
+    # print(a.collection['jobid'].unique())
+
+    # b = a + report_data[tmp_keys[2]]['LUSTRE_coll']
+    # print(b.collection['jobid'].unique())
+    # exit(0)
+
+    all_modules: Dict[str, any] = {}
+
     for report_name in list(report_data.keys()) :
         report: Dict = report_data[report_name]
 
         loaded_modules: List[str] = report["loaded_modules"]
 
         for module_name in loaded_modules :
-            report[module_name].export_parquet(output_dir, report_name)
+            if module_name not in all_modules.keys() :
+                all_modules[module_name] = [report[module_name]]
+            else :
+                all_modules[module_name].append(report[module_name])
+            #report[module_name].export_parquet(output_dir, report_name)
+    
+    for module in list(all_modules.keys()) :
+        res: CounterCollColl = reduce(lambda x,y: x+y, all_modules[module])
+        res.export_parquet(output_dir)
 
     if debug: print("Done writing parquet files!")
 
@@ -372,8 +431,7 @@ def aggregate_darshan(directory:str, output_loc:str, debug:bool = False) :
 
     for f in files :
         tmp_report_data = read_log(os.path.join(directory, f), debug=debug)
-        tmp_name = generate_name_for_report(tmp_report_data, debug)
-        collected_report_data[tmp_name] = tmp_report_data
+        collected_report_data[tmp_report_data["report_name"]] = tmp_report_data
     
     if debug : print("Done collecting data!")
 

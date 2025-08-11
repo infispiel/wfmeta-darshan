@@ -60,7 +60,8 @@ RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false upd
     git
 
 RUN python -m venv /pydarshan_venv && source /pydarshan_venv/bin/activate && \
-    pip install ipykernel pyarrow && /pydarshan/set_up_pydarshan.sh
+    pip install ipykernel pyarrow && \
+    chmod a+x /pydarshan/set_up_pydarshan.sh && /pydarshan/set_up_pydarshan.sh
 
 RUN { \
       echo '#!/bin/bash' \

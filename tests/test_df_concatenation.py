@@ -1,6 +1,6 @@
 import pytest
 import os
-import darshan_agg
+import wfmeta_darshan as darshan_agg
 import re
 import pandas as pd
 import numpy as np

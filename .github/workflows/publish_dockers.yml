@@ -33,7 +33,7 @@ jobs:
           file: ./share/docker/Dockerfile
           push: false
           target: core
-          tags: infispiel/darshan_util_dxtthread:latest
+          tags: infispiel/wfmeta_darshan_util_dxtthread:latest
 
       - name: Build and push development Docker image
         id: build_dev
@@ -42,4 +42,4 @@ jobs:
           context: ./share/docker
           file: ./share/docker/Dockerfile
           push: false
-          tags: infispiel/darshan_util_dxtthread_dev:latest
+          tags: infispiel/wfmeta_darshan_util_dxtthread_dev:latest

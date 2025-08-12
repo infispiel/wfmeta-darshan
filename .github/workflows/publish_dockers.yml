@@ -36,7 +36,7 @@ jobs:
           file: ./share/docker/Dockerfile
           push: true
           target: core
-          tags: infispiel/wfmeta_darshan_util_dxtthread:${{ env.BRANCH }}
+          tags: infiloop/wfmeta_darshan_util_dxtthread:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}
 
@@ -47,6 +47,6 @@ jobs:
           context: ./share/docker
           file: ./share/docker/Dockerfile
           push: true
-          tags: infispiel/wfmeta_darshan_util_dxtthread_dev:${{ env.BRANCH }}
+          tags: infiloop/wfmeta_darshan_util_dxtthread_dev:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}

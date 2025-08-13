@@ -79,7 +79,22 @@ FROM core
 
 RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && \
     apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false install -y \
-    vim
+    vim && \
+    source /pydarshan_venv/bin/activate && \
+    pip install ipykernel && \
+    pip install jupyter -U
 
-ENTRYPOINT [ "/entrypoint.sh" ]
-CMD [ "/bin/bash" ]
+EXPOSE 8888
+
+RUN mkdir /resource/
+
+RUN { \
+      echo '#!/bin/bash' \
+      && echo '.' /opt/spack-environment/activate.sh \
+      && echo 'source /pydarshan_venv/bin/activate' \
+      && echo 'jupyter notebook --ip=0.0.0.0 --allow-root --no-browser /resource/'; \
+    } > /entrypoint_jupyter.sh \
+&& chmod a+x /entrypoint_jupyter.sh \
+&& ln -s /opt/views/view /opt/view
+
+ENTRYPOINT ["/entrypoint_jupyter.sh"]

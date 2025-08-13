@@ -10,7 +10,7 @@ from .objs.colls import POSIX_coll, LUSTRE_coll, DXT_POSIX_coll, STDIO_coll, Cou
 # Main functions                                    #
 #####################################################
 
-def read_log(filename:str, debug:bool = False) -> Dict:
+def read_log(filename:str, debug:bool = False) -> Dict[str, Any]:
     """Read the provided `.darshan` log file.
     
     Manually reads in the provided `.darshan` log file by loading in its

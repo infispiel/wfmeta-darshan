@@ -29,4 +29,4 @@ docker run \
 	-v $datapath:/resource/data \
 	--interactive \
 	--tty \
-	infispiel/wfmeta_darshan_util_dxtthread_dev:dev_docker
+	infiloop/wfmeta_darshan_util_dxtthread_dev:dev

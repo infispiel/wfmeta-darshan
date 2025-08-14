@@ -1,12 +1,23 @@
 [project]
-name = "pydarshan-dask-tests"
+name = "wfmeta-darshan"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "darshan>=3.4.5.0",
+    #"darshan @ git+https://github.com/darshan-hpc/darshan@snyder/dxt-extra-info-pthread-id#egg=darshan&subdirectory=darshan-util/pydarshan",
     "ipykernel>=6.29.5",
     "pyarrow>=17.0.0",
     "pandas",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.pytest.ini_options]
+pythonpath= [
+    "src"
 ]

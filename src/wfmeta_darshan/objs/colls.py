@@ -1,5 +1,6 @@
 import os
-from typing import Dict, List, Tuple
+import re
+from typing import Any, Dict, List, Set, Tuple, Union
 import pandas as pd
 import logging
 ##############################
@@ -8,53 +9,48 @@ import logging
 
 class counters_coll :
     report_name: str
-    report_ids: Dict[str, str]
-    metadata: List[Tuple[int, int]]
-    records: Dict[Tuple[int, int], pd.DataFrame]
-    collapsed: pd.DataFrame
+    metadata: Dict[str, Union[List,Set,str]]
+    records: List[Any]
+
+    counters_df: pd.DataFrame
     module_name: str = "ERR"
+    # Dummy name until it gets overridden by a subclass.
 
-    def __init__(self, records, report_name, report_ids) :
-        self.report_name = report_name
-        self.report_ids = report_ids
-        self.metadata = []
-        self.records = {}
+    def __init__(self, records, juid: str, jobid: str) :
+        self.metadata = {}
+        self.metadata['juid'] = juid
+        self.metadata['jobid'] = jobid
 
+        self.metadata['ranks'] = set()
+        # MPI rank of the process that opened the file.
+        self.metadata['ids'] = set()
+        # IDs are 64-bit hashes of filenames/paths.
+
+        self.records = []
+
+        # input 'Records' is of type DarshanRecordCollection
+        # We used to want ranks, ids to be able to collapse the df.
+        #   but, turns out to_df() works just fine (IN MOST CASES).
+        #   we just can't read it AS a pandas df, because then it explodes!
         for record in records :
-            record_metadata = (record["rank"], record["id"])
-            # if record_metadata[0] != record["counters"].rank[0] and record_metadata[0] != -1 :
-            #     raise ValueError("Rank of record does not match rank in provided DF.")
-            # if record_metadata[1] != record["counters"].id[0] and record_metadata[1] != -1 :
-            #     raise ValueError("ID of record does not match rank in provided DF.")
+            self.metadata['ranks'].add(record['rank'])
+            self.metadata['ids'].add(record['id'])
 
-            logging.info(record.keys())
-            self.metadata.append(record_metadata)
-            self.records[record_metadata] = record["counters"]
-        
-        self._collapse_rank_id()
-    
-    def _collapse_rank_id(self) :
-        output_df: pd.DataFrame = pd.DataFrame()
-        for i,record in enumerate(self.metadata) :
-            if i == 0 :
-                output_df = self.records[record]
-            else :
-                output_df = pd.concat([output_df, self.records[record]])
+            self.records.append(record)
 
-        self.collapsed = output_df
+        # to_df() properly creates a single df with ranks, ids set properly.
+        #   just use this instead of re-doing work.
+        output_df: Dict[str, pd.DataFrame] = records.to_df()
+        self.counters_df = output_df['counters']
 
     def __add__(self, other: 'counters_coll') -> 'CounterCollColl' :
         return CounterCollColl(self, other)
-
 
 class LUSTRE_coll(counters_coll) :
     module_name: str = "LUSTRE"
 
     def __init__(self, *args) :
         super().__init__(*args)
-
-    # def export_parquet(self, directory: str, prefix: str) :
-    #     super().export_parquet("LUSTRE", directory, prefix)
 
 ##############################
 # two-dataframe      colls   #
@@ -65,62 +61,103 @@ class LUSTRE_coll(counters_coll) :
 
 class fcounters_coll(counters_coll) :
     module_name: str = "ERR_fcounters"
-    def __init__(self, records, report_name, report_ids):
-        self.report_name = report_name
-        self.report_ids = report_ids
-        # doesn't use super, might want to change it to use it but
-        #   then we're looping over records twice and that's mildly annoying
-        self.metadata = []
-        self.records = {}
+    fcounters_df: pd.DataFrame
 
-        for record in records :
-            record_metadata = (record["rank"], record["id"])
-            self.metadata.append(record_metadata)
-
-            combined: pd.DataFrame = pd.merge(
-                record["counters"], record["fcounters"], "left",
-                ["id","rank"])
-
-            self.records[record_metadata] = combined
-        
-        self._collapse_rank_id()
+    def __init__(self, records, juid: str, jobid: str):
+        super().__init__(records, juid, jobid)
+            
+        output_df: Dict[str, pd.DataFrame] = records.to_df()
+        self.fcounters_df = output_df['fcounters']
 
 class STDIO_coll(fcounters_coll) :
     module_name:str = "STDIO"
     def __init__(self, *args) :
         super().__init__(*args)
 
-    # def export_parquet(self, directory: str, prefix: str) :
-    #     super().export_parquet("STDIO", directory, prefix)
-
 class POSIX_coll(fcounters_coll) :
     module_name:str = "POSIX"
     def __init__(self, *args) :
         super().__init__(*args)
 
-    # def export_parquet(self, directory: str, prefix: str) :
-    #     super().export_parquet("POSIX", directory, prefix)
-
 class DXT_POSIX_coll(fcounters_coll) :
     module_name:str = "DXT_POSIX"
-    def __init__(self, records, report_name, report_ids) :
-        self.report_name = report_name
-        self.report_ids = report_ids
-        self.metadata: List[Tuple[int, str, int, int, int]] = []
-        self.records: Dict[Tuple[int, str, int, int, int], pd.DataFrame]= {}
 
-        for record in records :
-            record_metadata = (record["rank"], str(record["id"]), record["hostname"],
-                                record["write_count"], record["read_count"])
-            self.metadata.append(record_metadata)
+    read_segments: pd.DataFrame
+    write_segments: pd.DataFrame
 
-            r_df: pd.DataFrame = record['read_segments'].assign(seg_type="read")
-            w_df: pd.DataFrame = record['write_segments'].assign(seg_type="write")
+    def __init__(self, records, juid: str, jobid: str) :
+        # to_df behaves differently for DXT, so we need to make some changes.
+        self.metadata = {}
+        self.metadata['juid'] = juid
+        self.metadata['jobid'] = jobid
+        self.metadata['ranks'] = set()
+        self.metadata['ids'] = set()
+        self.metadata['hostnames'] = set()    
 
-            rw_df: pd.DataFrame = pd.concat([r_df, w_df]).assign(rank=record["rank"], id=str(record["id"]))
-            self.records[record_metadata] = rw_df
+        self.records = []    
 
-        self._collapse_rank_id()
+        collected_read: List = []
+        collected_write: List = []
+
+        for record in records:
+            self.metadata['ranks'].add(record['rank'])
+            self.metadata['ids'].add(record['id'])
+            self.metadata['hostnames'].add(record['hostname'])
+            self.records.append(record)
+
+            # In this specfic feature branch, there is an additional
+            #   column called "extra_info" in both r_segs and w_segs
+            # This content always contains "pthread_id=[-1-9]+"
+            # Let's turn this into a real column, and just throw a
+            #   warning if it's ever anything else.
+
+            if record['read_count'] > 0:
+                df: pd.DataFrame = record.to_df()[0]['read_segments']
+                df.insert(0,"rank", record['rank'])
+                df.insert(1, "id", record['id'])
+                df.astype({'id':'str'})
+
+                df = DXT_POSIX_coll._add_pthreadid_col(df, "read_segments")
+
+                collected_read.append(df)
+
+            if record['write_count'] > 0:
+                df: pd.DataFrame = record.to_df()[0]['write_segments']
+                df.insert(0,"rank", record['rank'])
+                df.insert(1, "id", record['id'])
+                df = df.astype({'id':'str'})
+
+                df = DXT_POSIX_coll._add_pthreadid_col(df, "write_segments")
+
+                collected_write.append(df)
+            
+        if len(collected_read) > 0:
+            self.read_segments = pd.concat(collected_read)
+        
+        if len(collected_write) > 0 :
+            self.write_segments = pd.concat(collected_write)
+
+    @staticmethod
+    def _add_pthreadid_col(df: pd.DataFrame, which_df: str, keep_extra: bool = False):
+        pthread_id_col: List[str] = []    
+        for values in df['extra_info']:
+            res: re.Match[str] | None = re.search(r'pthread\_id=(?P<threadid>[0-9]+)(?P<other>.+)?', values)
+            if res :
+                pthread_id: str | Any | None = res.groupdict().get('threadid')
+                other: str | Any | None      = res.groupdict().get('other')
+                if other:
+                    logging.warning("There is additional info in {which_df}'s extra_info column this is currently unhandled.")
+                if pthread_id:
+                    pthread_id_col.append(pthread_id)
+                else :
+                    logging.error("Was not able to find a pthread_id for a column in {which_df}.")
+
+        _, n_cols = df.shape
+        df.insert(n_cols - 1, 'pthread_id', pthread_id_col)
+        if not keep_extra :
+            df = df.drop('extra_info', axis=1)
+
+        return df
 
 ##############################
 # collection collections     #

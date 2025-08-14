@@ -5,6 +5,7 @@ import os
 import pandas as pd
 
 from .objs.colls import POSIX_coll, LUSTRE_coll, DXT_POSIX_coll, STDIO_coll, CounterCollColl
+from . import objs
 
 #####################################################
 # Main functions                                    #
@@ -35,18 +36,15 @@ def read_log(filename:str, debug:bool = False) -> Dict[str, Any]:
         print("\tFile exists. Moving on...")
 
     output: Dict = {}
-    with darshan.DarshanReport(filename, read_all=False) as report :
+    with darshan.DarshanReport(filename, read_all=True) as report :
         if debug :
             print("File successfully opened as a report.")
 
         # Get metadata
         output["metadata"] = report.metadata
 
-        report_ids = { 'juid': report.metadata['job']['uid'],
-                        'jobid': report.metadata['job']['jobid'] }
-        report_name = "juid%s_jobid%s" % (report_ids['juid'], report_ids['jobid'])
-        output["report_ids"] = report_ids
-        output["report_name"] = report_name
+        juid: str = report.metadata['job']['uid']
+        jobid: str = report.metadata['job']['jobid']
 
         # Get list of modules
         expected_modules = ["POSIX", "LUSTRE", "STDIO", "DXT_POSIX", "HEATMAP", "MPI-IO", "DXT_MPIIO"]
@@ -64,30 +62,21 @@ def read_log(filename:str, debug:bool = False) -> Dict[str, Any]:
 
         # Get data for each found module
         if "POSIX" in modules :
-            report.mod_read_all_records("POSIX",dtype="pandas")
-            #print(filename)
-            #print(report.records["POSIX"])
-            output["POSIX_coll"] = POSIX_coll(report.records["POSIX"], report_name, report_ids)
+            output["POSIX_coll"] = POSIX_coll(report.records["POSIX"], juid, jobid)
             loaded_modules.append("POSIX_coll")
         
         if "LUSTRE" in modules :
-            report.mod_read_all_lustre_records(dtype="pandas")
-            output["LUSTRE_coll"] = LUSTRE_coll(report.records["LUSTRE"], report_name, report_ids)
+            output["LUSTRE_coll"] = LUSTRE_coll(report.records["LUSTRE"], juid, jobid)
             loaded_modules.append("LUSTRE_coll")
 
         if "STDIO" in modules :
-            report.mod_read_all_records("STDIO", dtype="pandas")
-            output["STDIO_coll"] = STDIO_coll(report.records["STDIO"], report_name, report_ids)
+            output["STDIO_coll"] = STDIO_coll(report.records["STDIO"], juid, jobid)
             loaded_modules.append("STDIO_coll")
 
         if "DXT_POSIX" in modules :
-            # note that this generates a list of dictionaries, which then contain dataframes inside them
-            report.mod_read_all_dxt_records("DXT_POSIX")
-            pos = report.records['DXT_POSIX'].to_df()
-
             # created a custom output object to deal with it
-            output["DXT_POSIX_coll_object"] = DXT_POSIX_coll(pos, report_name, report_ids)
-            loaded_modules.append("DXT_POSIX_coll_object")
+            output["DXT_POSIX_coll"] = DXT_POSIX_coll(report.records['DXT_POSIX'], juid, jobid)
+            loaded_modules.append("DXT_POSIX_coll")
 
         # Received message: Skipping. Currently unsupported: HEATMAP in mod_read_all_records().
         # if "HEATMAP" in modules :
@@ -95,12 +84,10 @@ def read_log(filename:str, debug:bool = False) -> Dict[str, Any]:
         #     output["HEATMAP"] = report.records["HEATMAP"].to_df()
 
         if "MPI-IO" in modules :
-            report.mod_read_all_records("MPI-IO", dtype="pandas")
             print("############### MPI IO ###############")
             print(report.records["MPI-IO"])
 
         if "DXT_MPIIO" in modules :
-            report.mod_read_all_dxt_records("DXT_MPIIO", dtype="pandas")
             print("############### DXT MPI IO ###############")
             print(report.records["DXT_MPIIO"])
     
@@ -108,6 +95,60 @@ def read_log(filename:str, debug:bool = False) -> Dict[str, Any]:
     output["loaded_modules"] = loaded_modules
 
     return output
+
+def collect_metadata(reports: List[Dict], debug: bool = False) -> pd.DataFrame:
+    # available metadata per log:
+    # 'job':
+    #   'uid': 37993, 
+    #   'start_time_sec': 1713455670, 
+    #   'start_time_nsec': 57152534, 
+    #   'end_time_sec': 1713455883, 
+    #   'end_time_nsec': 91904150, 
+    #   'nprocs': 1, 
+    #   'jobid': 11298, 
+    #   'run_time': 213.03475165367126, 
+    #   'log_ver': '3.41', 
+    #   'metadata': 
+    #       'lib_ver': '3.4.4', 
+    #       'h': 'romio_no_indep_rw=true;cb_nodes=4'
+    # 'exe': '/home/agueroudji/spack/var/spack/environments/mofkadask/.spack-env/._view/ycbghmgvq7z34ridg4nntzus2jsgkcos/bin/python3.10 /home/agueroudji/spack/var/spack/environments/mofkadask/.spack-env/view/bin/dask worker --scheduler-file=scheduler.json --preload MofkaWorkerPlugin.py --mofka-protocol=cxi --ssg-file=mofka.ssg '
+
+    metadata_df_coll: List[pd.DataFrame] = []
+    header: List[str] = ['uid', 'jobid', 
+                         'start_time_sec', 'start_time_nsec',
+                         'end_time_sec', 'end_time_nsec',
+                         'nprocs', 'run_time',
+                         'log_ver',
+                         'meta.lib_ver', 'meta.h', 'exe']
+    
+    known_modules = ["POSIX", "LUSTRE", "STDIO", "DXT_POSIX", "HEATMAP", "MPI-IO", "DXT_MPIIO"]
+
+    for module in known_modules:
+        header.append(f"has_%s" % module)
+
+    for report in reports :
+        metadata: Dict[str, Any] = report['metadata']
+        j_m: Dict[str, Any] = metadata['job']
+        j_d: List = [j_m['uid'], j_m['jobid'], 
+                     j_m['start_time_sec'], j_m['start_time_nsec'],
+                     j_m['end_time_sec'], j_m['end_time_nsec'],
+                     j_m['nprocs'], j_m['run_time'],
+                     j_m['log_ver'],
+                     j_m['metadata']['lib_ver'],
+                     j_m['metadata']['h'],
+                     metadata['exe']]
+        
+        for module in known_modules:
+            if module in report['modules'] :
+                j_d.append(True)
+            else :
+                j_d.append(False)
+
+        metadata_df_coll.append(pd.DataFrame([j_d]))
+    
+    output_df: pd.DataFrame = pd.concat(metadata_df_coll)
+    output_df.columns = header
+    return output_df
 
 def collect_logfiles(directory:str, debug:bool = False) -> List[str]:
     """Collects all the `.darshan` log files in the provided directory.
@@ -137,56 +178,6 @@ def collect_logfiles(directory:str, debug:bool = False) -> List[str]:
         exit(1)
 
     return logfiles
-
-def move_metadata_into_dataframe(report_data: Dict[str, Dict], debug: bool = False) -> pd.DataFrame:
-    """Collects metadata from a list of reports and returns a dataframe.
-
-    Gathers the data available in the `metadata` attribute of a darshan
-    log for all of the darshan logs provided and collects them into a
-    dataframe for storage.
-    """
-
-    # Names are taken from the 'metadata' attribute of the darshan report.
-    mdf_header: List[str] = [
-        "run_time",
-        "start_time_nsec", # not sure why both nsec & sec
-        "start_time_sec",
-        "end_time_nsec",
-        "end_time_sec",
-        "jobid",
-        "uid",
-        "log_ver", # ?
-        "metadata", # ?
-        "nprocs",
-        "exe"
-    ]
-
-    # Create dataframe to store metadata.
-    metadata_df: pd.DataFrame = pd.DataFrame(columns=mdf_header)
-
-    for report_name in list(report_data.keys()) :
-        report = report_data[report_name]
-        # Gather metadata and put into an array.
-        
-        values = [] # no type hint bc type varies
-        # exe is under 'metadata' directly not 'job' so we can't do it
-        #   as part of the for loop.
-        for val in mdf_header[:-1] : 
-            values.append(report['metadata']['job'][val])
-        values.append(report['metadata']['exe'])
-
-        # Make sure names aren't being duplicated.
-        if report_name in metadata_df.index.values.tolist() :
-            raise ValueError("The name %s is not unique -- attempted to insert a row into the metadata df into a location that already exists!" % report_name)
-        
-        # Add to dataframe.
-        metadata_df.loc[report_name] = values
-    
-    if debug:
-        print(metadata_df)
-
-    # Return dataframe containing all report metadata.
-    return(metadata_df)
 
 def write_to_parquet(report_data: Dict[str, Dict], 
                      metadata_df: pd.DataFrame, 
@@ -269,7 +260,7 @@ def aggregate_darshan(directory:str, output_loc:str, debug:bool = False) :
     if debug:
         print("Collecting metadata into a dataframe...")
 
-    metadata_df: pd.DataFrame = move_metadata_into_dataframe(collected_report_data, debug)
+    metadata_df: pd.DataFrame = collect_metadata(list(collected_report_data.values()), debug)
 
     if debug:
         print("Done collecting metadata!")

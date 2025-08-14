@@ -82,7 +82,7 @@ RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false upd
     vim && \
     source /pydarshan_venv/bin/activate && \
     pip install ipykernel && \
-    pip install jupyter -U
+    pip install jupyterlab -U
 
 EXPOSE 8888
 
@@ -92,7 +92,7 @@ RUN { \
       echo '#!/bin/bash' \
       && echo '.' /opt/spack-environment/activate.sh \
       && echo 'source /pydarshan_venv/bin/activate' \
-      && echo 'jupyter notebook --ip=0.0.0.0 --allow-root --no-browser /resource/'; \
+      && echo 'jupyter lab --ip=0.0.0.0 --allow-root --no-browser /resource/'; \
     } > /entrypoint_jupyter.sh \
 && chmod a+x /entrypoint_jupyter.sh \
 && ln -s /opt/views/view /opt/view

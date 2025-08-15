@@ -1,2 +1,2 @@
 from . import colls
-from .log import Log
+from .log import Log, LogCollection

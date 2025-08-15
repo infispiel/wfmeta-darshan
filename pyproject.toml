@@ -1,16 +1,16 @@
 [project]
 name = "wfmeta-darshan"
 version = "0.1.0"
-description = "Add your description here"
+description = "wfmeta Tool to read and aggregate Darshan logs."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
-    "darshan>=3.4.5.0",
-    #"darshan @ git+https://github.com/darshan-hpc/darshan@snyder/dxt-extra-info-pthread-id#egg=darshan&subdirectory=darshan-util/pydarshan",
-    "ipykernel>=6.29.5",
     "pyarrow>=17.0.0",
     "pandas",
 ]
+
+[project.scripts]
+wfmeta-darshan = "wfmeta_darshan:create_parser_and_run"
 
 [dependency-groups]
 dev = [

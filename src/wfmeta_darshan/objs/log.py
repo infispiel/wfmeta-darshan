@@ -68,25 +68,25 @@ class Log:
         
         return pd.DataFrame([j_d])
 
-    def get_module_as_df(self, module_name: str) -> Union[pd.DataFrame, Dict[str, pd.DataFrame]] :
+    def get_module_as_df(self, module_name: str) -> Dict[str, pd.DataFrame] :
         if module_name not in self.expected_modules :
             logging.error("Attempted to get a module from a log that is never coded to exist: %s" % module_name)
             exit(1)
         
         if module_name not in self.loaded_modules :
             logging.warning("Tried to get module %s from a log that does not have it loaded." % module_name)
-            return pd.DataFrame()
+            return {'NULL': pd.DataFrame()}
         
         output = pd.DataFrame()
         match module_name:
             case "POSIX" :
-                output = self.POSIX.get_both_df_with_ids()
+                output = self.POSIX.get_df_with_ids()
             case "LUSTRE":
                 output = self.LUSTRE.get_df_with_ids()
             case "STDIO":
-                output = self.STDIO.get_both_df_with_ids()
+                output = self.STDIO.get_df_with_ids()
             case "DXT_POSIX":
-                output = self.DXT_POSIX.get_both_df_with_ids()
+                output = self.DXT_POSIX.get_df_with_ids()
             case _:
                 logging.error("Attempted to access module name %s in Log switch-case that does not exist." % module_name)
                 exit(1)
@@ -108,7 +108,7 @@ class Log:
         for log in logs:
             output_df_collection.append(log.get_metadata_df())
 
-        output_df: pd.DataFrame = pd.concat(output_df_collection)
+        output_df: pd.DataFrame = pd.concat(output_df_collection, ignore_index=True)
         output_df.columns = header
 
         return output_df
@@ -121,22 +121,44 @@ class Log:
         return output
     
 class LogCollection:
+    # Eventually, may want to add aggregation statistics, and this is
+    #   the best place to do so because it has access to all the data.
+    # Perhaps eventually create classes for collected collections,
+    #   so we don't have to turn it into dfs right away, but idk.
     logs: List[Log]
 
     def __init__(self, logs: List[Log]) :
         self.logs = logs
 
-    def GetAllOfModule(self, module_name: str) -> Union[pd.DataFrame, List[pd.DataFrame]] :
-        output: pd.DataFrame = pd.DataFrame()
+    def get_module_as_df(self, module_name: str) -> Dict[str, pd.DataFrame]:
+        output: Dict[str, pd.DataFrame] = {}
 
         if module_name not in Log.expected_modules :
             logging.error("Provided module name %s, which is not expected." % module_name)
             exit(1)
 
-        collected_dfs = []
+        collected_dfs: Dict[str, List[pd.DataFrame]] = {}
+        keys: list[str] = []
+        match module_name:
+            case "DXT_POSIX":
+                keys = ['read_segments', 'write_segments']
+            case "POSIX":
+                keys = ['counters', 'fcounters']
+            case "STDIO":
+                keys = ['counters', 'fcounters']
+            case "LUSTRE":
+                keys = ['counters']
+
+        for key in keys:
+            collected_dfs[key] = []
+        
         for l in self.logs :
             if module_name in l.loaded_modules :
-                df = l.get_module(module_name)
-
+                dfs: Dict[str, pd.DataFrame] = l.get_module_as_df(module_name)
+                for key in keys :
+                    collected_dfs[key].append(dfs[key])
+        
+        for key in keys:
+            output[key] = pd.concat(collected_dfs[key], ignore_index=True)
 
         return output

@@ -27,8 +27,6 @@ class counters_coll :
         self.metadata = {}
         self.juid = juid
         self.jobid = jobid
-        self.metadata['juid'] = juid
-        self.metadata['jobid'] = jobid
 
         self.ranks = set()
         # MPI rank of the process that opened the file.
@@ -50,17 +48,17 @@ class counters_coll :
         # to_df() properly creates a single df with ranks, ids set properly.
         #   just use this instead of re-doing work.
         output_df: Dict[str, pd.DataFrame] = records.to_df()
-        self.counters_df = output_df['counters']
+        self.counters_df = output_df['counters'].astype({'id':str})
 
-    def __add__(self, other: 'counters_coll') -> 'CounterCollColl' :
-        return CounterCollColl(self, other)
-
-    def get_df_with_ids(self) -> pd.DataFrame :
+    def get_df_with_ids(self) -> Dict[str, pd.DataFrame] :
         df = self.counters_df
-        df.insert(0, 'jobid', self.jobid)
-        df.insert(1, 'juid', self.juid)
+        if 'jobid' not in df.columns:
+            df.insert(0, 'jobid', self.jobid)
+        if 'juid' not in df.columns:
+            df.insert(1, 'juid', self.juid)
 
-        return df
+        df = df.astype({'id': str})
+        return {'counters': df}
     
     def get_metadata(self) -> Dict[str, Any]:
         metadata = {}
@@ -94,19 +92,20 @@ class fcounters_coll(counters_coll) :
         output_df: Dict[str, pd.DataFrame] = records.to_df()
         self.fcounters_df = output_df['fcounters']
 
-    def get_both_df_with_ids(self) -> Dict[str, pd.DataFrame]:
+    def get_df_with_ids(self) -> Dict[str, pd.DataFrame]:
         df_c = self.counters_df
-        df_c.insert(0, 'jobid', self.jobid)
-        df_c.insert(1, 'juid', self.juid)
+        if 'jobid' not in df_c.columns:
+            df_c.insert(0, 'jobid', self.jobid)
+        if 'juid' not in df_c.columns:
+            df_c.insert(1, 'juid', self.juid)
 
         df_f = self.fcounters_df
-        df_f.insert(0, 'jobid', self.jobid)
-        df_f.insert(1, 'juid', self.juid)
+        if 'jobid' not in df_f.columns:
+            df_f.insert(0, 'jobid', self.jobid)
+        if 'juid' not in df_f.columns:
+            df_f.insert(1, 'juid', self.juid)
 
         return {'counters': df_c, 'fcounters': df_f}
-    
-    def get_df_with_ids(self) -> pd.DataFrame:
-        raise TypeError("Cannot get 1 df from fcounter collection")
 
 class STDIO_coll(fcounters_coll) :
     module_name:str = "STDIO"
@@ -119,19 +118,25 @@ class POSIX_coll(fcounters_coll) :
         super().__init__(*args)
 
 class DXT_POSIX_coll(fcounters_coll) :
+    hostnames: Set
+
     module_name:str = "DXT_POSIX"
 
+    has_read: bool
+    has_write: bool
     read_segments: pd.DataFrame
     write_segments: pd.DataFrame
 
     def __init__(self, records, juid: str, jobid: str) :
+        self.has_read = False
+        self.has_write = False
+
+        self.juid = juid
+        self.jobid = jobid
+        self.ranks = set()
+        self.IDs = set()
+        self.hostnames = set()
         # to_df behaves differently for DXT, so we need to make some changes.
-        self.metadata = {}
-        self.metadata['juid'] = juid
-        self.metadata['jobid'] = jobid
-        self.metadata['ranks'] = set()
-        self.metadata['ids'] = set()
-        self.metadata['hostnames'] = set()    
 
         self.records = []    
 
@@ -139,9 +144,9 @@ class DXT_POSIX_coll(fcounters_coll) :
         collected_write: List = []
 
         for record in records:
-            self.metadata['ranks'].add(record['rank'])
-            self.metadata['ids'].add(record['id'])
-            self.metadata['hostnames'].add(record['hostname'])
+            self.ranks.add(record['rank'])
+            self.IDs.add(record['id'])
+            self.hostnames.add(record['hostname'])
             self.records.append(record)
 
             # In this specfic feature branch, there is an additional
@@ -151,6 +156,8 @@ class DXT_POSIX_coll(fcounters_coll) :
             #   warning if it's ever anything else.
 
             if record['read_count'] > 0:
+                self.has_read = True
+
                 df: pd.DataFrame = record.to_df()[0]['read_segments']
                 df.insert(0,"rank", record['rank'])
                 df.insert(1, "id", record['id'])
@@ -161,6 +168,8 @@ class DXT_POSIX_coll(fcounters_coll) :
                 collected_read.append(df)
 
             if record['write_count'] > 0:
+                self.has_write = True
+
                 df: pd.DataFrame = record.to_df()[0]['write_segments']
                 df.insert(0,"rank", record['rank'])
                 df.insert(1, "id", record['id'])
@@ -171,19 +180,34 @@ class DXT_POSIX_coll(fcounters_coll) :
                 collected_write.append(df)
             
         if len(collected_read) > 0:
-            self.read_segments = pd.concat(collected_read)
+            self.read_segments = pd.concat(collected_read, ignore_index=True)
         
         if len(collected_write) > 0 :
-            self.write_segments = pd.concat(collected_write)
+            self.write_segments = pd.concat(collected_write, ignore_index=True)
 
-    def get_both_df_with_ids(self) -> Dict[str, pd.DataFrame]:
-        df_c = self.read_segments
-        df_c.insert(0, 'jobid', self.jobid)
-        df_c.insert(1, 'juid', self.juid)
+    def get_metadata(self) -> Dict[str, Any]:
+        metadata = super().get_metadata()
+        metadata['hostnames'] = self.hostnames
+        return metadata
 
-        df_f = self.write_segments
-        df_f.insert(0, 'jobid', self.jobid)
-        df_f.insert(1, 'juid', self.juid)
+    def get_df_with_ids(self) -> Dict[str, pd.DataFrame]:
+        if self.has_read:
+            df_c = self.read_segments
+            if 'jobid' not in df_c.columns:
+                df_c.insert(0, 'jobid', self.jobid)
+            if 'juid' not in df_c.columns:
+                df_c.insert(1, 'juid', self.juid)
+        else :
+            df_c = pd.DataFrame()
+
+        if self.has_write:
+            df_f = self.write_segments
+            if 'jobid' not in df_f.columns:
+                df_f.insert(0, 'jobid', self.jobid)
+            if 'juid' not in df_f.columns:
+                df_f.insert(1, 'juid', self.juid)
+        else :
+            df_f = pd.DataFrame()
 
         return {'read_segments': df_c, 'write_segments': df_f}
 
@@ -208,57 +232,3 @@ class DXT_POSIX_coll(fcounters_coll) :
             df = df.drop('extra_info', axis=1)
 
         return df
-
-##############################
-# collection collections     #
-##############################
-
-# e.g. collections of collected module information
-#   i.e. sum of all POSIX collections from all records
-#   separates them by their job uid and jobid.
-
-class CounterCollColl :
-    _type: type
-    module_name: str
-    collection: pd.DataFrame
-
-    def __init__(self, left: counters_coll, right: counters_coll) :
-        if type(left) is not type(right) :
-            raise ValueError("Attempted to combine a %s and a %s." % 
-                             (str(type(left)), str(type(right))))
-        
-        self._type = type(left)
-        self.module_name = left.module_name
-        l_df: pd.DataFrame = left.collapsed
-        l_ids = left.report_ids
-        r_df: pd.DataFrame = right.collapsed
-        r_ids = right.report_ids
-
-        # add ids info as columns
-        l_df = l_df.assign(juid=l_ids['juid'], jobid=l_ids['jobid'])
-        r_df = r_df.assign(juid=r_ids['juid'], jobid=r_ids['jobid'])
-
-        self.collection = pd.concat([l_df,r_df])
-
-    def _file_fillers (self, module_name: str):
-        file_prefix = module_name
-        file_suffix = ".parquet"
-        return (file_prefix, file_suffix)
-
-    def export_parquet(self, directory: str, ltype: str = "counters") :
-        file_prefix, file_suffix = self._file_fillers(self.module_name)
-
-        filename = "%s_%s%s" % (file_prefix, ltype, file_suffix)
-        self.collection.to_parquet(os.path.join(directory, filename))
-
-    def __add__(self, other: counters_coll) :
-        if type(other) is not self._type :
-            raise ValueError("Attempted to add a %s to a %s collection" %
-            (str(type(other)), str(self._type)))
-        
-        r_df: pd.DataFrame = other.collapsed
-        r_ids = other.report_ids
-        r_df = r_df.assign(juid=r_ids['juid'], jobid=r_ids['jobid'])
-
-        self.collection = pd.concat([self.collection,r_df])
-        return self

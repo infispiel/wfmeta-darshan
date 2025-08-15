@@ -2,7 +2,7 @@ name: Build & Push Docker Images
 
 on:
   push:
-    branches: [ dev ]
+    branches: [ dev, main ]
     paths: [ share/docker/**, .github/workflows/publish_dockers.yml ]
 
 env:

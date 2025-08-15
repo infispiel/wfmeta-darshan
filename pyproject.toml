@@ -1,13 +1,21 @@
 [project]
 name = "wfmeta-darshan"
 version = "0.1.0"
+authors = [
+    { name="Polina Shpilker", email="infinite.loopholes@gmail.com" }
+]
 description = "wfmeta Tool to read and aggregate Darshan logs."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "pyarrow>=17.0.0",
     "pandas",
 ]
+
+[project.urls]
+Homepage = "https://github.com/infispiel/wfmeta-darshan"
 
 [project.scripts]
 wfmeta-darshan = "wfmeta_darshan:create_parser_and_run"
@@ -21,3 +29,8 @@ dev = [
 pythonpath= [
     "src"
 ]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"

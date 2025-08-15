@@ -24,8 +24,9 @@ datapath=$(to-abs-path $2)
 #customrepopath=$(to-abs-path ~/spack_custom_repo)
 
 docker run \
+    -p 8888:8888 \
 	-v $codepath:/resource/code \
 	-v $datapath:/resource/data \
 	--interactive \
 	--tty \
-	infiloop/wfmeta_darshan_util_dxtthread:dev
+	infiloop/wfmeta_darshan_util_dxtthread_dev:dev

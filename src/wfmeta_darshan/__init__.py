@@ -4,8 +4,9 @@ import darshan
 import os
 import pandas as pd
 
+from wfmeta_darshan.objs.log import Log
+
 from .objs.colls import POSIX_coll, LUSTRE_coll, DXT_POSIX_coll, STDIO_coll, CounterCollColl
-from . import objs
 
 #####################################################
 # Main functions                                    #
@@ -124,7 +125,7 @@ def collect_metadata(reports: List[Dict], debug: bool = False) -> pd.DataFrame:
     known_modules = ["POSIX", "LUSTRE", "STDIO", "DXT_POSIX", "HEATMAP", "MPI-IO", "DXT_MPIIO"]
 
     for module in known_modules:
-        header.append(f"has_%s" % module)
+        header.append("has_%s" % module)
 
     for report in reports :
         metadata: Dict[str, Any] = report['metadata']
@@ -237,6 +238,13 @@ def write_to_parquet(report_data: Dict[str, Dict],
     if debug:
         print("Done writing parquet files!")
 
+def read_log_files(files: List[str], debug: bool = False) -> List[Log]:
+    logs: List[Log] = []
+    for f in files :
+        logs.append(Log.From_File(f))
+    
+    return logs
+
 def aggregate_darshan(directory:str, output_loc:str, debug:bool = False) :
     '''Runs the darshan log aggregation process.
 
@@ -245,14 +253,11 @@ def aggregate_darshan(directory:str, output_loc:str, debug:bool = False) :
     their data into a new `pandas.DataFrame` and ... TODO
     '''
     files: List[str] = collect_logfiles(directory, debug)
-    collected_report_data: Dict[str, Dict] = {}
 
     if debug:
         print("Beginning to collect log data...")
 
-    for f in files :
-        tmp_report_data = read_log(os.path.join(directory, f), debug=debug)
-        collected_report_data[tmp_report_data["report_name"]] = tmp_report_data
+    logs: List[Log] = read_log_files(files, debug)
     
     if debug:
         print("Done collecting data!")
@@ -260,7 +265,7 @@ def aggregate_darshan(directory:str, output_loc:str, debug:bool = False) :
     if debug:
         print("Collecting metadata into a dataframe...")
 
-    metadata_df: pd.DataFrame = collect_metadata(list(collected_report_data.values()), debug)
+    metadata_df: pd.DataFrame = Log.get_total_metadata_df(logs)
 
     if debug:
         print("Done collecting metadata!")

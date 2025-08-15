@@ -16,14 +16,23 @@ class counters_coll :
     module_name: str = "ERR"
     # Dummy name until it gets overridden by a subclass.
 
+    juid: str
+    jobid: str
+
+    ranks: Set[str]
+    IDs: Set[str]
+
+
     def __init__(self, records, juid: str, jobid: str) :
         self.metadata = {}
+        self.juid = juid
+        self.jobid = jobid
         self.metadata['juid'] = juid
         self.metadata['jobid'] = jobid
 
-        self.metadata['ranks'] = set()
+        self.ranks = set()
         # MPI rank of the process that opened the file.
-        self.metadata['ids'] = set()
+        self.ids = set()
         # IDs are 64-bit hashes of filenames/paths.
 
         self.records = []
@@ -33,8 +42,8 @@ class counters_coll :
         #   but, turns out to_df() works just fine (IN MOST CASES).
         #   we just can't read it AS a pandas df, because then it explodes!
         for record in records :
-            self.metadata['ranks'].add(record['rank'])
-            self.metadata['ids'].add(record['id'])
+            self.ranks.add(record['rank'])
+            self.ids.add(record['id'])
 
             self.records.append(record)
 
@@ -45,6 +54,22 @@ class counters_coll :
 
     def __add__(self, other: 'counters_coll') -> 'CounterCollColl' :
         return CounterCollColl(self, other)
+
+    def get_df_with_ids(self) -> pd.DataFrame :
+        df = self.counters_df
+        df.insert(0, 'jobid', self.jobid)
+        df.insert(1, 'juid', self.juid)
+
+        return df
+    
+    def get_metadata(self) -> Dict[str, Any]:
+        metadata = {}
+        metadata['jobid'] = self.jobid
+        metadata['juid'] = self.juid
+        metadata['ranks'] = self.ranks
+        metadata['ids'] = self.IDs
+
+        return metadata
 
 class LUSTRE_coll(counters_coll) :
     module_name: str = "LUSTRE"
@@ -68,6 +93,20 @@ class fcounters_coll(counters_coll) :
             
         output_df: Dict[str, pd.DataFrame] = records.to_df()
         self.fcounters_df = output_df['fcounters']
+
+    def get_both_df_with_ids(self) -> Dict[str, pd.DataFrame]:
+        df_c = self.counters_df
+        df_c.insert(0, 'jobid', self.jobid)
+        df_c.insert(1, 'juid', self.juid)
+
+        df_f = self.fcounters_df
+        df_f.insert(0, 'jobid', self.jobid)
+        df_f.insert(1, 'juid', self.juid)
+
+        return {'counters': df_c, 'fcounters': df_f}
+    
+    def get_df_with_ids(self) -> pd.DataFrame:
+        raise TypeError("Cannot get 1 df from fcounter collection")
 
 class STDIO_coll(fcounters_coll) :
     module_name:str = "STDIO"
@@ -136,6 +175,17 @@ class DXT_POSIX_coll(fcounters_coll) :
         
         if len(collected_write) > 0 :
             self.write_segments = pd.concat(collected_write)
+
+    def get_both_df_with_ids(self) -> Dict[str, pd.DataFrame]:
+        df_c = self.read_segments
+        df_c.insert(0, 'jobid', self.jobid)
+        df_c.insert(1, 'juid', self.juid)
+
+        df_f = self.write_segments
+        df_f.insert(0, 'jobid', self.jobid)
+        df_f.insert(1, 'juid', self.juid)
+
+        return {'read_segments': df_c, 'write_segments': df_f}
 
     @staticmethod
     def _add_pthreadid_col(df: pd.DataFrame, which_df: str, keep_extra: bool = False):

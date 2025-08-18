@@ -1,0 +1,23 @@
+
+name: Run Tests
+
+on:
+  push:
+    branches: [ dev* ]
+
+jobs:
+    test:
+        name: Run test suite
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: checkout repository
+              uses: actions/checkout@v4
+
+            - name: docker compose
+              uses: adambirds/docker-compose-action@v1.5.0
+              with:
+                compose-file: './share/docker/docker-compose.yml'
+                compose-flags: '--env-file .env.dev'
+                test-container: 'wfmeta_darshan_ci'
+                test-command: 'pytest'

@@ -17,8 +17,7 @@ jobs:
             - name: docker compose
               uses: adambirds/docker-compose-action@v1.5.0
               with:
-                context: './share/docker'
-                compose-file: './share/docker/docker-compose.yml'
+                compose-file: './share/docker/docker-compose_ci.yml'
                 compose-flags: '--env-file .env.dev'
-                test-container: 'wfmeta_darshan_ci'
+                test-container: 'CI'
                 test-command: 'pytest'

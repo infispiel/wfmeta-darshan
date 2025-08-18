@@ -23,7 +23,7 @@ class counters_coll :
     IDs: Set[str]
 
 
-    def __init__(self, records, juid: str, jobid: str) :
+    def __init__(self, records, juid: str, jobid: str, counters_name: str = 'counters') :
         self.metadata = {}
         self.juid = juid
         self.jobid = jobid
@@ -48,7 +48,7 @@ class counters_coll :
         # to_df() properly creates a single df with ranks, ids set properly.
         #   just use this instead of re-doing work.
         output_df: Dict[str, pd.DataFrame] = records.to_df()
-        self.counters_df = output_df['counters'].astype({'id':str})
+        self.counters_df = output_df[counters_name].astype({'id':str})
 
     def get_df_with_ids(self) -> Dict[str, pd.DataFrame] :
         df = self.counters_df
@@ -73,7 +73,8 @@ class LUSTRE_coll(counters_coll) :
     module_name: str = "LUSTRE"
 
     def __init__(self, *args) :
-        super().__init__(*args)
+        super().__init__(*args, counters_name='components')
+        # TODO: make cleaner.
 
 ##############################
 # two-dataframe      colls   #

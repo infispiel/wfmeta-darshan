@@ -75,7 +75,15 @@ RUN { \
 ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "/bin/bash" ]
 
-FROM core
+FROM core AS ci
+
+RUN source /pydarshan_venv/bin/activate && \
+    pip install pytest
+
+ENTRYPOINT [ "/entrypoint.sh" ]
+CMD [ "/bin/bash" ]
+
+FROM core AS dev
 
 RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && \
     apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false install -y \

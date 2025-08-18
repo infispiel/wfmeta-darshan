@@ -1,0 +1,21 @@
+services:
+  core:
+    container_name: wfmeta_darshan_core
+    build:
+      dockerfile: ./Dockerfile
+      target: core
+    image: infiloop/wfmeta_darshan_util_dxtthread:${TAG}
+  
+  dev:
+    container_name: wfmeta_darshan_dev
+    build:
+      dockerfile: ./Dockerfile
+      target: dev
+    image: infiloop/wfmeta_darshan_util_dxtthread_dev:${TAG}
+
+  ci:
+    container_name: wfmeta_darshan_ci
+    build:
+      dockerfile: ./Dockerfile
+      target: ci
+    image: infiloop/wfmeta_darshan_util_dxtthread_ci:${TAG}

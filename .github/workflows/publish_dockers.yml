@@ -60,6 +60,6 @@ jobs:
           file: ./share/docker/Dockerfile
           push: true
           target: ci
-          tags: infiloop/wfmeta_darshan_util_dxtthread_dev:${{ env.BRANCH }}
+          tags: infiloop/wfmeta_darshan_util_dxtthread_ci:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}

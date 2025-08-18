@@ -14,6 +14,9 @@ jobs:
             - name: checkout repository
               uses: actions/checkout@v4
 
+            - name: Set Branchname in env
+              run: echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
             - name: docker compose
               uses: adambirds/docker-compose-action@v1.5.0
               with:

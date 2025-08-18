@@ -1,0 +1,30 @@
+
+Lmod is automatically replacing "PrgEnv-nvhpc/8.3.3" with "PrgEnv-gnu/8.3.3".
+
+
+Lmod is automatically replacing "nvhpc/22.11" with "gcc/12.2.0".
+
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) cray-mpich/8.1.25
+
+[1;93m==>[0m Warning: setting 'compiler:', 'target:' or 'provider:' preferences in a package-specific section of packages.yaml is deprecated, and will be removed in v0.22.
+
+	These preferences will be ignored by Spack, and can be set only in the 'all' section of the same file. You can run:
+
+		$ spack audit configs
+
+	to get better diagnostics, including files:lines where the deprecated attributes are used.
+
+	Use requirements to enforce conditions on specific packages: https://spack.readthedocs.io/en/latest/packages_yaml.html#package-requirements
+
+==> Warning: setting 'compiler:', 'target:' or 'provider:' preferences in a package-specific section of packages.yaml is deprecated, and will be removed in v0.22.
+
+	These preferences will be ignored by Spack, and can be set only in the 'all' section of the same file. You can run:
+
+		$ spack audit configs
+
+	to get better diagnostics, including files:lines where the deprecated attributes are used.
+
+	Use requirements to enforce conditions on specific packages: https://spack.readthedocs.io/en/latest/packages_yaml.html#package-requirements
+

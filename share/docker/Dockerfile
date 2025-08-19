@@ -75,19 +75,21 @@ RUN { \
 ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "/bin/bash" ]
 
-FROM core
+FROM core AS dev
 
 RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && \
     apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false install -y \
     vim && \
     source /pydarshan_venv/bin/activate && \
     pip install ipykernel && \
+    pip install pytest && \
     pip install jupyterlab -U
 
 EXPOSE 8888
 
 RUN mkdir /resource/
 
+COPY --from=core /entrypoint.sh /entrypoint.sh
 RUN { \
       echo '#!/bin/bash' \
       && echo '.' /opt/spack-environment/activate.sh \

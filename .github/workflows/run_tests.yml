@@ -1,0 +1,27 @@
+
+name: Run Tests
+
+on:
+  push:
+    branches: [ dev* ]
+
+jobs:
+    test:
+        name: Run test suite
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: checkout repository
+              uses: actions/checkout@v4
+
+            - name: Set Branchname in env
+              run: echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+            - name: docker compose
+              uses: adambirds/docker-compose-action@v1.5.0
+              with:
+                compose-file: './share/docker/docker-compose_ci.yml'
+                test-container: 'CI'
+                test-command: 'pytest'
+              env:
+                TAG: ${{ env.BRANCH }}

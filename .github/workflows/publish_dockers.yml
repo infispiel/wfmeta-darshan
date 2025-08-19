@@ -2,7 +2,7 @@ name: Build & Push Docker Images
 
 on:
   push:
-    branches: [ dev, main ]
+    branches: [ dev, main, dev_dockercompose_* ]
     paths: [ share/docker/**, .github/workflows/publish_dockers.yml ]
 
 env:
@@ -21,6 +21,9 @@ jobs:
 
       - name: Set Branchname in env
         run: echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -30,7 +33,7 @@ jobs:
 
       - name: Build and push Docker image
         id: build_core
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        uses: docker/build-push-action@v6
         with:
           context: ./share/docker
           file: ./share/docker/Dockerfile
@@ -39,14 +42,19 @@ jobs:
           tags: infiloop/wfmeta_darshan_util_dxtthread:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push development Docker image
         id: build_dev
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        uses: docker/build-push-action@v6
         with:
           context: ./share/docker
           file: ./share/docker/Dockerfile
           push: true
+          target: dev
           tags: infiloop/wfmeta_darshan_util_dxtthread_dev:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

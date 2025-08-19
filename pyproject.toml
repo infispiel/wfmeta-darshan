@@ -1,5 +1,5 @@
 [project]
-name = "wfmeta-darshan"
+name = "wfmeta_darshan"
 version = "0.1.0"
 authors = [
     { name="Polina Shpilker", email="infinite.loopholes@gmail.com" }
@@ -18,7 +18,7 @@ dependencies = [
 Homepage = "https://github.com/infispiel/wfmeta-darshan"
 
 [project.scripts]
-wfmeta-darshan = "wfmeta_darshan:create_parser_and_run"
+wfmeta_darshan = "wfmeta_darshan:create_parser_and_run"
 
 [dependency-groups]
 dev = [

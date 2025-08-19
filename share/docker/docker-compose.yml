@@ -12,10 +12,3 @@ services:
       dockerfile: ./Dockerfile
       target: dev
     image: infiloop/wfmeta_darshan_util_dxtthread_dev:${TAG}
-
-  ci:
-    container_name: wfmeta_darshan_ci
-    build:
-      dockerfile: ./Dockerfile
-      target: ci
-    image: infiloop/wfmeta_darshan_util_dxtthread_ci:${TAG}

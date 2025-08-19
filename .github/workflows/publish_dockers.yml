@@ -39,6 +39,8 @@ jobs:
           tags: infiloop/wfmeta_darshan_util_dxtthread:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push development Docker image
         id: build_dev
@@ -51,3 +53,5 @@ jobs:
           tags: infiloop/wfmeta_darshan_util_dxtthread_dev:${{ env.BRANCH }}
           build-args: |
             BRANCH=${{ env.BRANCH }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

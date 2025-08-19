@@ -1,12 +1,36 @@
 [project]
-name = "pydarshan-dask-tests"
+name = "wfmeta_darshan"
 version = "0.1.0"
-description = "Add your description here"
+authors = [
+    { name="Polina Shpilker", email="infinite.loopholes@gmail.com" }
+]
+description = "wfmeta Tool to read and aggregate Darshan logs."
 readme = "README.md"
-requires-python = ">=3.8"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
 dependencies = [
-    "darshan>=3.4.5.0",
-    "ipykernel>=6.29.5",
     "pyarrow>=17.0.0",
     "pandas",
 ]
+
+[project.urls]
+Homepage = "https://github.com/infispiel/wfmeta-darshan"
+
+[project.scripts]
+wfmeta_darshan = "wfmeta_darshan:create_parser_and_run"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.pytest.ini_options]
+pythonpath= [
+    "src"
+]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"

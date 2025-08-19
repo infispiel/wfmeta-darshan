@@ -6,3 +6,6 @@ ex_darshan_logs
 XPDaMoDa
 parquet/
 parquet2/
+__pycache__
+scratch/
+*.egg-info

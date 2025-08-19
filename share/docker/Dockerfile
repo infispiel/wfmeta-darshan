@@ -60,7 +60,8 @@ RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false upd
     git
 
 RUN python -m venv /pydarshan_venv && source /pydarshan_venv/bin/activate && \
-    pip install ipykernel pyarrow && /pydarshan/set_up_pydarshan.sh
+    pip install ipykernel pyarrow && \
+    chmod a+x /pydarshan/set_up_pydarshan.sh && /pydarshan/set_up_pydarshan.sh
 
 RUN { \
       echo '#!/bin/bash' \
@@ -74,11 +75,28 @@ RUN { \
 ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "/bin/bash" ]
 
-FROM core
+FROM core AS dev
 
 RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && \
     apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false install -y \
-    vim
+    vim && \
+    source /pydarshan_venv/bin/activate && \
+    pip install ipykernel && \
+    pip install pytest && \
+    pip install jupyterlab -U
 
-ENTRYPOINT [ "/entrypoint.sh" ]
-CMD [ "/bin/bash" ]
+EXPOSE 8888
+
+RUN mkdir /resource/
+
+COPY --from=core /entrypoint.sh /entrypoint.sh
+RUN { \
+      echo '#!/bin/bash' \
+      && echo '.' /opt/spack-environment/activate.sh \
+      && echo 'source /pydarshan_venv/bin/activate' \
+      && echo 'jupyter lab --ip=0.0.0.0 --allow-root --no-browser /resource/'; \
+    } > /entrypoint_jupyter.sh \
+&& chmod a+x /entrypoint_jupyter.sh \
+&& ln -s /opt/views/view /opt/view
+
+ENTRYPOINT ["/entrypoint_jupyter.sh"]

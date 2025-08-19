@@ -89,6 +89,7 @@ EXPOSE 8888
 
 RUN mkdir /resource/
 
+COPY --from=core /entrypoint.sh /entrypoint.sh
 RUN { \
       echo '#!/bin/bash' \
       && echo '.' /opt/spack-environment/activate.sh \

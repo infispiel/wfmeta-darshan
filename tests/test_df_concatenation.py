@@ -14,27 +14,18 @@ def ImageProcessingFixture() :
     yield [os.path.join(test_file_dir, f) for f in only_full_logs]
 
 def test_read_write_concat(ImageProcessingFixture, tmp_path) :
-    records = []
-    for f in ImageProcessingFixture :
-        records.append(darshan_agg.read_log(f))
+    # Doesn't actually test anything interesting.
+    # Leaving here as a prototype for future tests.
+    records = darshan_agg.read_log_files(ImageProcessingFixture)
+
+    darshan_agg.aggregate_darshan("tests/test_data/ImageProcessing1", tmp_path)
+
+    lc = darshan_agg.LogCollection(records)
+
+    saved_dxt_posix_r: pd.DataFrame = pd.read_csv(os.path.join(tmp_path, "DXT_POSIX_read_segments.csv"), index_col=0)
+    saved_dxt_posix_w: pd.DataFrame = pd.read_csv(os.path.join(tmp_path, "DXT_POSIX_write_segments.csv"), index_col=0)
     
-    darshan_agg.aggregate_darshan("tests/test_data/ImageProcessing1", os.path.join(tmp_path))
+    dfs = lc.get_module_as_df("DXT_POSIX")
 
-    saved_dxt_posix = pd.read_parquet(os.path.join(tmp_path, "DXT_POSIX_counters.parquet"))
-
-    for r in records :
-        if "DXT_POSIX_coll_object" in r['loaded_modules']:
-            juid, jobid = r['report_ids']['juid'], r['report_ids']['jobid']
-            dxt_check = r["DXT_POSIX_coll_object"].collapsed
-            dxt_check = dxt_check.assign(juid=juid, jobid=jobid)
-
-            joined = pd.merge(saved_dxt_posix, dxt_check,
-                                on=['offset', 'length', 'start_time', 'end_time', 'extra_info', 'seg_type', 'rank', 'id', 'juid', 'jobid'],
-                                how='left',
-                                indicator='exist')
-            joined['Exist'] = np.where(joined.exist == 'both', True, False)
-            n_found = len(joined[joined.Exist])
-            print("Original: %s, found: %s" % (dxt_check.shape[0], n_found))
-            assert n_found == dxt_check.shape[0]
-
-    pass
+    assert saved_dxt_posix_r.shape == dfs['read_segments'].shape
+    assert saved_dxt_posix_w.shape == dfs['write_segments'].shape

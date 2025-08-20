@@ -1,12 +1,11 @@
-name: Build & Push Docker Images
+name: Build & Push Production Docker Containers
 
 on:
-  push:
-    branches: [ dev, main, dev_dockercompose_* ]
-    paths: [ share/docker/**, .github/workflows/publish_dockers.yml ]
+    push:
+        branches: main
 
 env:
-  DOCKERHUB_USERNAME: infiloop
+    DOCKERHUB_USERNAME: infiloop
 
 jobs:
   build-and-push-image:
@@ -18,9 +17,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set Branchname in env
-        run: echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -36,12 +32,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./share/docker
-          file: ./share/docker/dev/Dockerfile
+          file: ./share/docker/prod/Dockerfile
           push: true
           target: core
-          tags: infiloop/wfmeta_darshan_util_dxtthread:${{ env.BRANCH }}
-          build-args: |
-            BRANCH=${{ env.BRANCH }}
+          tags: infiloop/wfmeta_darshan:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -50,11 +44,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./share/docker
-          file: ./share/docker/dev/Dockerfile
+          file: ./share/docker/prod/Dockerfile
           push: true
           target: dev
-          tags: infiloop/wfmeta_darshan_util_dxtthread_dev:${{ env.BRANCH }}
-          build-args: |
-            BRANCH=${{ env.BRANCH }}
+          tags: infiloop/wfmeta_darshan:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -2,11 +2,11 @@ name: Run Interactive Env
 
 services:
   CI:
-    image: infiloop/wfmeta_darshan_util_dxtthread_dev:${TAG:-main}
+    image: infiloop/wfmeta_darshan:${TAG:-latest}
     entrypoint: /entrypoint.sh
     command: ["/bin/bash"]
     working_dir: /resource/code
     volumes:
-      - ../../:/resource/code
+      - ../../../:/resource/code
     tty: true
     stdin_open: true

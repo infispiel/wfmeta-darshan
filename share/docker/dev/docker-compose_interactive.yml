@@ -1,0 +1,10 @@
+name: Run Interactive Env
+
+services:
+  Interactive:
+    image: infiloop/wfmeta_darshan_util_dxtthread:${TAG:-main}
+    working_dir: /resource/code
+    volumes:
+      - ../../../:/resource/code
+    tty: true
+    stdin_open: true

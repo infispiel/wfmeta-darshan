@@ -2,9 +2,9 @@ name: Run Jupyter Env
 
 services:
   JupyterLab:
-    image: infiloop/wfmeta_darshan_util_dxtthread_dev:${TAG:-main}
+    image: infiloop/wfmeta_darshan:${TAG:-latest}
     ports:
       - 8888:8888
     working_dir: /resource
     volumes:
-      - ../../:/resource/code
+      - ../../../:/resource/code

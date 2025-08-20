@@ -1,0 +1,16 @@
+services:
+  core:
+    container_name: wfmeta_darshan_core
+    build:
+      context: ${contextdir}
+      dockerfile: ./prod/Dockerfile
+      target: core
+    image: infiloop/wfmeta_darshan:${TAG:-latest}
+  
+  dev:
+    container_name: wfmeta_darshan_dev
+    build:
+      context: ${contextdir}
+      dockerfile: ./prod/Dockerfile
+      target: dev
+    image: infiloop/wfmeta_darshan:${TAG:-latest}

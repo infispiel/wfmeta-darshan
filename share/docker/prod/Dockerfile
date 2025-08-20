@@ -73,6 +73,8 @@ RUN { \
 && chmod a+x /entrypoint.sh \
 && ln -s /opt/views/view /opt/view
 
+RUN mkdir /resource/
+
 ADD https://github.com/GueroudjiAmal/XPDaMoDa.git /resource/Data
 
 ENTRYPOINT [ "/entrypoint.sh" ]
@@ -90,10 +92,8 @@ RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false upd
 
 EXPOSE 8888
 
-RUN mkdir /resource/
-
 COPY --from=core /entrypoint.sh /entrypoint.sh
-COPY --from=core /resource/Data /resource/Data
+COPY --from=core /resource /resource
 
 RUN { \
       echo '#!/bin/bash' \

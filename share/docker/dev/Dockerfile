@@ -72,6 +72,8 @@ RUN { \
 && chmod a+x /entrypoint.sh \
 && ln -s /opt/views/view /opt/view
 
+ADD https://github.com/GueroudjiAmal/XPDaMoDa.git /resource/Data
+
 ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "/bin/bash" ]
 
@@ -90,6 +92,8 @@ EXPOSE 8888
 RUN mkdir /resource/
 
 COPY --from=core /entrypoint.sh /entrypoint.sh
+COPY --from=core /resource/Data /resource/Data
+
 RUN { \
       echo '#!/bin/bash' \
       && echo '.' /opt/spack-environment/activate.sh \

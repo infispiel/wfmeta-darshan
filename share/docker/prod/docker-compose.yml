@@ -13,4 +13,4 @@ services:
       context: ${contextdir}
       dockerfile: ./prod/Dockerfile
       target: dev
-    image: infiloop/wfmeta_darshan:${TAG:-latest}
+    image: infiloop/wfmeta_darshan_dev:${TAG:-latest}

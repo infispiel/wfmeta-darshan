@@ -3,7 +3,7 @@ name: Run Interactive Env
 services:
   Interactive:
     image: infiloop/wfmeta_darshan:${TAG:-latest}
-    working_dir: /resource/code
+    working_dir: /resource
     volumes:
       - .:/resource/host
     tty: true

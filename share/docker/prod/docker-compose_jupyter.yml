@@ -7,4 +7,4 @@ services:
       - 8888:8888
     working_dir: /resource
     volumes:
-      - ../../../:/resource/code
+      - .:/resource/host

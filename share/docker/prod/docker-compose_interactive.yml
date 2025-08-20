@@ -5,6 +5,6 @@ services:
     image: infiloop/wfmeta_darshan:${TAG:-latest}
     working_dir: /resource/code
     volumes:
-      - ../../../:/resource/code
+      - .:/resource/host
     tty: true
     stdin_open: true

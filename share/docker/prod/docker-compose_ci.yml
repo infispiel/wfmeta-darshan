@@ -5,8 +5,8 @@ services:
     image: infiloop/wfmeta_darshan:${TAG:-latest}
     entrypoint: /entrypoint.sh
     command: ["/bin/bash"]
-    working_dir: /resource/code
+    working_dir: /resource
     volumes:
-      - ../../../:/resource/code
+      - .:/resource/host
     tty: true
     stdin_open: true

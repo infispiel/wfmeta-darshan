@@ -47,6 +47,6 @@ jobs:
           file: ./share/docker/prod/Dockerfile
           push: true
           target: dev
-          tags: infiloop/wfmeta_darshan:latest
+          tags: infiloop/wfmeta_darshan_dev:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
